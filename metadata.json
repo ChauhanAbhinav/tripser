@@ -1,0 +1,7 @@
+{
+  "name": "Tripser",
+  "description": "A next-generation travel platform designed to eliminate planning fatigue and transit anxiety.",
+  "requestFramePermissions": [
+    "geolocation"
+  ]
+}
