@@ -1,17 +1,19 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { ShieldAlert, Phone, MapPin, X, AlertTriangle, BellRing } from 'lucide-react';
+import { useToast } from './Toast';
 
 export default function SOSButton() {
   const [isOpen, setIsOpen] = useState(false);
   const [isAlerting, setIsAlerting] = useState(false);
+  const { toast } = useToast();
 
   const handleAlert = () => {
     setIsAlerting(true);
     setTimeout(() => {
       setIsAlerting(false);
       setIsOpen(false);
-      alert("Emergency contacts and local authorities have been notified of your location.");
+      toast("Emergency contacts and local authorities have been notified of your location.", "success");
     }, 2000);
   };
 

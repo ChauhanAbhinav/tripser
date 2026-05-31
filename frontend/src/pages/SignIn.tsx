@@ -10,6 +10,7 @@ interface SignInProps {
   isOpen: boolean;
   onClose: () => void;
   onSignIn?: () => void;
+  nextPath?: string | null;
 }
 
 function ErrorBanner({ msg }: { msg: string }) {
@@ -138,7 +139,7 @@ function OTPInput({ value, onChange }: OTPInputProps) {
 // ---------------------------------------------------------------------------
 // Main
 // ---------------------------------------------------------------------------
-export default function SignIn({ isOpen, onClose, onSignIn }: SignInProps) {
+export default function SignIn({ isOpen, onClose, onSignIn, nextPath }: SignInProps) {
   const [view, setView] = useState<View>('options');
   const [isSignUp, setIsSignUp] = useState(false);
   const [formData, setFormData] = useState({ email: '', password: '', phone: '', fullName: '' });
@@ -175,7 +176,7 @@ export default function SignIn({ isOpen, onClose, onSignIn }: SignInProps) {
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo: `${window.location.origin}/auth/callback`,
+        redirectTo: `${window.location.origin}/auth/callback${nextPath ? `?next=${nextPath}` : ''}`,
         queryParams: { access_type: 'offline', prompt: 'consent' },
       },
     });
@@ -197,7 +198,7 @@ export default function SignIn({ isOpen, onClose, onSignIn }: SignInProps) {
             full_name: formData.fullName || 'Traveler',
             avatar_url: `https://api.dicebear.com/7.x/avataaars/svg?seed=${formData.email}`,
           },
-          emailRedirectTo: `${window.location.origin}/auth/callback`,
+          emailRedirectTo: `${window.location.origin}/auth/callback${nextPath ? `?next=${nextPath}` : ''}`,
         },
       });
       if (error) {

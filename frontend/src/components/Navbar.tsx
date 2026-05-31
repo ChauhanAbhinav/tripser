@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Plane, Map, Calendar, Wallet, User, Menu, X, Users, LogOut, ChevronDown } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../lib/utils';
@@ -10,9 +10,9 @@ const navItems = [
   { name: 'Home',      path: '/',          icon: Plane    },
   { name: 'Discovery', path: '/discovery', icon: Map      },
   { name: 'Planner',   path: '/planner',   icon: Calendar },
-  { name: 'Wallet',    path: '/wallet',    icon: Wallet   },
+  { name: 'Wallet',    path: '/wallet',    icon: Wallet,   requiresAuth: true },
   { name: 'Community', path: '/community', icon: Users    },
-  { name: 'Dashboard', path: '/dashboard', icon: User     },
+  { name: 'Dashboard', path: '/dashboard', icon: User,     requiresAuth: true },
 ];
 
 export default function Navbar() {
@@ -20,7 +20,9 @@ export default function Navbar() {
   const [isSignInOpen, setIsSignInOpen] = useState(false);
   const [user, setUser]               = useState<any>(null);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
+  const [pendingPath, setPendingPath] = useState<string | null>(null);
   const location = useLocation();
+  const navigate = useNavigate();
 
   // ─── Auth state ────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -38,6 +40,13 @@ export default function Navbar() {
 
     return () => subscription.unsubscribe();
   }, []);
+
+  useEffect(() => {
+    if (user && pendingPath) {
+      navigate(pendingPath);
+      setPendingPath(null);
+    }
+  }, [user, pendingPath, navigate]);
 
   // Close user menu when clicking outside
   useEffect(() => {
@@ -84,6 +93,13 @@ export default function Navbar() {
               <Link
                 key={item.path}
                 to={item.path}
+                onClick={(e) => {
+                  if (item.requiresAuth && !user) {
+                    e.preventDefault();
+                    setPendingPath(item.path);
+                    setIsSignInOpen(true);
+                  }
+                }}
                 className={cn(
                   'px-3 py-2 rounded-xl text-sm font-medium transition-colors hover:bg-gray-50 hover:text-primary',
                   location.pathname === item.path ? 'text-primary bg-primary/5' : 'text-accent'
@@ -142,7 +158,10 @@ export default function Navbar() {
               </div>
             ) : (
               <button
-                onClick={() => setIsSignInOpen(true)}
+                onClick={() => {
+                  setPendingPath(null);
+                  setIsSignInOpen(true);
+                }}
                 className="btn-primary py-2 px-6 text-sm"
               >
                 Sign In
@@ -173,7 +192,14 @@ export default function Navbar() {
                 <Link
                   key={item.path}
                   to={item.path}
-                  onClick={() => setIsOpen(false)}
+                  onClick={(e) => {
+                    if (item.requiresAuth && !user) {
+                      e.preventDefault();
+                      setPendingPath(item.path);
+                      setIsSignInOpen(true);
+                    }
+                    setIsOpen(false);
+                  }}
                   className={cn(
                     'flex items-center gap-3 px-4 py-3 rounded-xl text-accent hover:bg-gray-50 transition-colors',
                     location.pathname === item.path && 'bg-primary/5 text-primary font-semibold'
@@ -209,7 +235,11 @@ export default function Navbar() {
               ) : (
                 <div className="pt-4 px-4">
                   <button
-                    onClick={() => { setIsSignInOpen(true); setIsOpen(false); }}
+                    onClick={() => { 
+                      setPendingPath(null);
+                      setIsSignInOpen(true); 
+                      setIsOpen(false); 
+                    }}
                     className="w-full btn-primary py-2.5 text-center rounded-xl"
                   >
                     Sign In
@@ -226,6 +256,7 @@ export default function Navbar() {
         isOpen={isSignInOpen}
         onClose={() => setIsSignInOpen(false)}
         onSignIn={() => setIsSignInOpen(false)}
+        nextPath={pendingPath}
       />
     </nav>
   );

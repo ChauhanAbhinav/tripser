@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { supabase } from '../lib/supabaseClient'; // adjust path as needed
 import { useAuth } from '../hooks/userAuth'; // adjust path as needed
+import { useToast } from '../components/Toast';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -105,6 +106,7 @@ function NewBadge() {
 
 export default function Community() {
   const { user } = useAuth();
+  const { toast } = useToast();
 
   const [boards, setBoards] = useState<VotingBoard[]>([]);
   const [vibes, setVibes] = useState<LiveVibe[]>([]);
@@ -298,7 +300,7 @@ export default function Community() {
 
   const handleVote = useCallback(async (optionId: number) => {
     if (!user) {
-      alert('Please sign in to vote.');
+      toast('Please sign in to vote.', 'info');
       return;
     }
     if (votingInProgress.has(optionId)) return;
