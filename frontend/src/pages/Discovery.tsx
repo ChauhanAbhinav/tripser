@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { motion } from 'motion/react';
 import {
@@ -164,6 +164,10 @@ export default function Discovery() {
   const handlePlanTrip = (id: number) => {
     setOrchestratingId(id);
     setTimeout(() => navigate('/planner'), 2000);
+  };
+
+  const handleViewPlace = (id: number) => {
+    navigate(`/discovery/place/${id}`);
   };
 
   const toggleFilter = (key: keyof Filters) => {
@@ -345,9 +349,13 @@ export default function Discovery() {
                 {destinations.map((dest, i) => (
                   <div key={dest.id} className="absolute" style={{ top: `${30 + (i * 20)}%`, left: `${40 + (i * 15)}%` }}>
                     <div className="group relative">
-                      <div className="w-12 h-12 bg-white rounded-full flex items-center justify-center shadow-xl border-4 border-primary text-primary cursor-pointer hover:scale-110 transition-transform">
+                      <button
+                        onClick={() => handleViewPlace(dest.id)}
+                        className="w-12 h-12 bg-white rounded-full flex items-center justify-center shadow-xl border-4 border-primary text-primary cursor-pointer hover:scale-110 transition-transform"
+                        aria-label={`View ${dest.name}`}
+                      >
                         <MapPin size={20} />
-                      </div>
+                      </button>
                       <div className="absolute top-full mt-2 left-1/2 -translate-x-1/2 w-48 bg-white p-3 rounded-xl shadow-xl opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-10">
                         <img src={dest.image} alt={dest.name} className="w-full h-20 object-cover rounded-lg mb-2" />
                         <p className="font-bold text-sm text-accent leading-tight">{dest.name}</p>
@@ -438,23 +446,31 @@ export default function Discovery() {
                         </div>
                       </div>
 
-                      <button
-                        onClick={() => handlePlanTrip(dest.id)}
-                        disabled={orchestratingId === dest.id}
-                        className="w-full mt-4 btn-primary py-3 rounded-xl flex items-center justify-center gap-2 disabled:opacity-80 transition-all"
-                      >
-                        {orchestratingId === dest.id ? (
-                          <>
-                            <RefreshCw size={18} className="animate-spin" />
-                            Orchestrating...
-                          </>
-                        ) : (
-                          <>
-                            Plan Trip
-                            <ChevronRight size={18} />
-                          </>
-                        )}
-                      </button>
+                      <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                        <button
+                          onClick={() => handleViewPlace(dest.id)}
+                          className="w-full rounded-xl border border-gray-200 bg-white py-3 text-sm font-bold text-accent transition-colors hover:border-primary hover:text-primary"
+                        >
+                          View Place
+                        </button>
+                        <button
+                          onClick={() => handlePlanTrip(dest.id)}
+                          disabled={orchestratingId === dest.id}
+                          className="w-full btn-primary py-3 rounded-xl flex items-center justify-center gap-2 disabled:opacity-80 transition-all"
+                        >
+                          {orchestratingId === dest.id ? (
+                            <>
+                              <RefreshCw size={18} className="animate-spin" />
+                              Orchestrating...
+                            </>
+                          ) : (
+                            <>
+                              Plan Trip
+                              <ChevronRight size={18} />
+                            </>
+                          )}
+                        </button>
+                      </div>
                     </div>
                   </motion.div>
                 ))}
@@ -463,6 +479,7 @@ export default function Discovery() {
           </div>
         </div>
       </div>
+
     </div>
   );
 }
