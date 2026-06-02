@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { getAdvice, getDestinations, pivotItinerary } from '../controllers/travelController.js';
+import { getAdvice, getDestinations, pivotItinerary, analyzeProfile } from '../controllers/travelController.js';
 
 const router = Router();
 
@@ -7,5 +7,6 @@ const router = Router();
 router.post('/advice', getAdvice);
 router.post('/destinations', getDestinations);
 router.post('/pivot', pivotItinerary);
+router.post('/analyze-profile', analyzeProfile);
 
 export default router;

@@ -3,8 +3,9 @@ import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { Mail, Phone, Plane, ArrowRight, ArrowLeft, X, Loader2 } from 'lucide-react';
 import { supabase } from '../lib/supabaseClient';
+import { EmailOtpVerification, ErrorBanner, PhoneVerification, SuccessBanner } from '../components/AuthVerification';
 
-type View = 'options' | 'email' | 'phone' | 'phone-otp' | 'verify-email';
+type View = 'options' | 'email' | 'phone' | 'phone-otp' | 'email-otp';
 
 interface SignInProps {
   isOpen: boolean;
@@ -13,128 +14,45 @@ interface SignInProps {
   nextPath?: string | null;
 }
 
-function ErrorBanner({ msg }: { msg: string }) {
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: -6 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="mb-4 p-3 bg-red-50 text-red-500 text-sm rounded-xl border border-red-100"
-    >
-      {msg}
-    </motion.div>
-  );
-}
-
-function SuccessBanner({ msg }: { msg: string }) {
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: -6 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="mb-4 p-3 bg-emerald-50 text-emerald-600 text-sm rounded-xl border border-emerald-100"
-    >
-      {msg}
-    </motion.div>
-  );
-}
-
 async function upsertProfile(user: any) {
   if (!user) return;
-  const fullName =
-    user.user_metadata?.full_name ||
-    user.user_metadata?.name ||
-    user.phone ||
-    'Traveler';
-  const avatarUrl =
-    user.user_metadata?.avatar_url ||
-    user.user_metadata?.picture ||
-    `https://api.dicebear.com/7.x/avataaars/svg?seed=${user.id}`;
+
+  const { data: existingProfile } = await supabase
+    .from('profiles')
+    .select('*')
+    .eq('id', user.id)
+    .maybeSingle();
+
+  const updates: any = { id: user.id };
+
+  const isDefaultName = !existingProfile?.full_name || existingProfile.full_name === 'Traveler' || existingProfile.full_name === user.phone || existingProfile.full_name === user.email;
+  if (isDefaultName) {
+    updates.full_name = user.user_metadata?.full_name || user.user_metadata?.name || user.phone || 'Traveler';
+  }
+  if (!existingProfile?.avatar_url || existingProfile.avatar_url?.includes('dicebear')) {
+    updates.avatar_url = user.user_metadata?.avatar_url || user.user_metadata?.picture || `https://api.dicebear.com/7.x/avataaars/svg?seed=${user.id}`;
+  }
+  if (user.phone && !existingProfile?.phone) {
+    updates.phone = user.phone;
+  }
+
+  const payload = existingProfile ? { ...existingProfile, ...updates, id: user.id } : { ...updates, id: user.id };
+
   const { error } = await supabase
     .from('profiles')
-    .upsert({ id: user.id, full_name: fullName, avatar_url: avatarUrl }, { onConflict: 'id', ignoreDuplicates: false });
+    .upsert(payload, { onConflict: 'id' });
   if (error) console.error('Profile upsert error:', error.message);
+  else window.dispatchEvent(new Event('profile_check_requested'));
 }
 
-// ---------------------------------------------------------------------------
-// OTPInput — no onComplete prop; parent handles auto-submit via onChange
-// ---------------------------------------------------------------------------
-interface OTPInputProps {
-  value: string;
-  onChange: (v: string) => void;
-}
+const getEmailOtpSuccessMessage = () => {
+  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
+  const isLocalSupabase = supabaseUrl?.includes('127.0.0.1:54321') || supabaseUrl?.includes('127.0.0.1:54321');
 
-function OTPInput({ value, onChange }: OTPInputProps) {
-  const [digits, setDigits] = useState<string[]>(Array(6).fill(''));
-
-  useEffect(() => {
-    if (!value) setDigits(Array(6).fill(''));
-  }, [value]);
-
-  const handleKey = (e: React.KeyboardEvent<HTMLInputElement>, idx: number) => {
-    if (e.key === 'Backspace' && !digits[idx] && idx > 0) {
-      (document.getElementById(`otp-${idx - 1}`) as HTMLInputElement)?.focus();
-    }
-  };
-
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>, idx: number) => {
-    const val = e.target.value.replace(/\D/g, '');
-    if (!val) {
-      const next = [...digits];
-      next[idx] = '';
-      setDigits(next);
-      onChange(next.join(''));
-      return;
-    }
-
-    // Handle autofill/paste of multiple digits seamlessly
-    if (val.length > 1) {
-      const pasted = val.slice(0, 6).split('');
-      const next = Array(6).fill('');
-      pasted.forEach((char, i) => next[i] = char);
-      setDigits(next);
-      onChange(next.join(''));
-      const focusIdx = Math.min(pasted.length, 5);
-      (document.getElementById(`otp-${focusIdx}`) as HTMLInputElement)?.focus();
-      return;
-    }
-
-    const next = [...digits];
-    next[idx] = val;
-    setDigits(next);
-    onChange(next.join(''));
-    if (idx < 5) (document.getElementById(`otp-${idx + 1}`) as HTMLInputElement)?.focus();
-  };
-
-  const handlePaste = (e: React.ClipboardEvent) => {
-    e.preventDefault();
-    const pasted = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, 6).split('');
-    if (pasted.length === 0) return;
-    const next = Array(6).fill('');
-    pasted.forEach((char, i) => next[i] = char);
-    setDigits(next);
-    onChange(next.join(''));
-    const focusIdx = Math.min(pasted.length, 5);
-    (document.getElementById(`otp-${focusIdx}`) as HTMLInputElement)?.focus();
-  };
-
-  return (
-    <div className="flex gap-2 justify-center" onPaste={handlePaste}>
-      {digits.map((d, i) => (
-        <input
-          key={i}
-          id={`otp-${i}`}
-          type="text"
-          inputMode="numeric"
-          value={d}
-          onChange={(e) => handleChange(e, i)}
-          onKeyDown={(e) => handleKey(e, i)}
-          autoFocus={i === 0}
-          autoComplete={i === 0 ? 'one-time-code' : 'off'}
-          className="w-11 h-14 text-center text-xl font-bold border-2 border-gray-200 rounded-xl focus:border-primary outline-none transition-all bg-gray-50 focus:bg-white"
-        />
-      ))}
-    </div>
-  );
-}
+  return isLocalSupabase
+    ? 'Verification code sent. Open local Mailpit at http://127.0.0.1:54324 to read it.'
+    : 'Verification code sent. Check your inbox and spam folder.';
+};
 
 // ---------------------------------------------------------------------------
 // Main
@@ -142,9 +60,10 @@ function OTPInput({ value, onChange }: OTPInputProps) {
 export default function SignIn({ isOpen, onClose, onSignIn, nextPath }: SignInProps) {
   const [view, setView] = useState<View>('options');
   const [isSignUp, setIsSignUp] = useState(false);
-  const [formData, setFormData] = useState({ email: '', password: '', phone: '', fullName: '' });
+  const [formData, setFormData] = useState({ email: '', password: '', phone: '' });
   const [otp, setOtp] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [isResendingEmail, setIsResendingEmail] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
 
@@ -152,8 +71,9 @@ export default function SignIn({ isOpen, onClose, onSignIn, nextPath }: SignInPr
     if (!isOpen) {
       setView('options');
       setIsSignUp(false);
-      setFormData({ email: '', password: '', phone: '', fullName: '' });
+      setFormData({ email: '', password: '', phone: '' });
       setOtp('');
+      setIsResendingEmail(false);
       setErrorMsg('');
       setSuccessMsg('');
     }
@@ -190,12 +110,12 @@ export default function SignIn({ isOpen, onClose, onSignIn, nextPath }: SignInPr
     clearMessages();
 
     if (isSignUp) {
-      const { data, error } = await supabase.auth.signUp({
+      const { error } = await supabase.auth.signInWithOtp({
         email: formData.email,
-        password: formData.password,
         options: {
+          shouldCreateUser: true,
           data: {
-            full_name: formData.fullName || 'Traveler',
+            full_name: 'Traveler',
             avatar_url: `https://api.dicebear.com/7.x/avataaars/svg?seed=${formData.email}`,
           },
           emailRedirectTo: `${window.location.origin}/auth/callback${nextPath ? `?next=${nextPath}` : ''}`,
@@ -204,9 +124,9 @@ export default function SignIn({ isOpen, onClose, onSignIn, nextPath }: SignInPr
       if (error) {
         setErrorMsg(error.message);
       } else {
-        if (data.user) await upsertProfile(data.user);
-        if (data.session) await handleSuccess(data.user);
-        else setView('verify-email');
+        setOtp('');
+        setView('email-otp');
+        setSuccessMsg(getEmailOtpSuccessMessage());
       }
     } else {
       const { data, error } = await supabase.auth.signInWithPassword({
@@ -231,6 +151,82 @@ export default function SignIn({ isOpen, onClose, onSignIn, nextPath }: SignInPr
     else setSuccessMsg('Password reset email sent — check your inbox.');
   };
 
+  const handleResendEmailVerification = async () => {
+    if (!formData.email) {
+      setErrorMsg('Enter your email address first.');
+      return;
+    }
+
+    setIsResendingEmail(true);
+    clearMessages();
+
+    const { error } = await supabase.auth.signInWithOtp({
+      email: formData.email,
+      options: {
+        shouldCreateUser: true,
+        data: {
+          full_name: 'Traveler',
+          avatar_url: `https://api.dicebear.com/7.x/avataaars/svg?seed=${formData.email}`,
+        },
+        emailRedirectTo: `${window.location.origin}/auth/callback${nextPath ? `?next=${nextPath}` : ''}`,
+      },
+    });
+
+    setIsResendingEmail(false);
+
+    if (error) setErrorMsg(error.message);
+    else {
+      setOtp('');
+      setSuccessMsg(getEmailOtpSuccessMessage());
+    }
+  };
+
+  const verifyEmailOtp = async (otpValue: string) => {
+    if (otpValue.length < 6 || isLoading) return;
+
+    setIsLoading(true);
+    clearMessages();
+
+    const { data, error } = await supabase.auth.verifyOtp({
+      email: formData.email,
+      token: otpValue,
+      type: 'email',
+    });
+
+    if (error) {
+      setErrorMsg(error.message);
+      setIsLoading(false);
+      return;
+    }
+
+    const { data: passwordData, error: passwordError } = await supabase.auth.updateUser({
+      password: formData.password,
+      data: {
+        full_name: 'Traveler',
+        avatar_url: `https://api.dicebear.com/7.x/avataaars/svg?seed=${formData.email}`,
+      },
+    });
+
+    if (passwordError) {
+      setErrorMsg(passwordError.message);
+      setIsLoading(false);
+      return;
+    }
+
+    await handleSuccess(passwordData.user || data.user);
+    setIsLoading(false);
+  };
+
+  const handleEmailOtpChange = (val: string) => {
+    setOtp(val);
+    if (val.length === 6) verifyEmailOtp(val);
+  };
+
+  const handleEmailOtpSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    verifyEmailOtp(otp);
+  };
+
   // ── Phone: send OTP ───────────────────────────────────────────────────────
   const handlePhoneSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -246,7 +242,7 @@ export default function SignIn({ isOpen, onClose, onSignIn, nextPath }: SignInPr
 
   // ── Phone: verify OTP ─────────────────────────────────────────────────────
   // Accepts the value directly — never reads from otp state to avoid stale closure
-  const verifyOtp = async (otpValue: string) => {
+  const verifyPhoneOtp = async (otpValue: string) => {
     if (otpValue.length < 6 || isLoading) return;
     setIsLoading(true);
     clearMessages();
@@ -266,12 +262,12 @@ export default function SignIn({ isOpen, onClose, onSignIn, nextPath }: SignInPr
   // No stale closure — val is the value right now, not otp from last render
   const handleOtpChange = (val: string) => {
     setOtp(val);
-    if (val.length === 6) verifyOtp(val);
+    if (val.length === 6) verifyPhoneOtp(val);
   };
 
   const handleOtpSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    verifyOtp(otp);
+    verifyPhoneOtp(otp);
   };
 
   const handleResendOtp = async () => {
@@ -290,7 +286,7 @@ export default function SignIn({ isOpen, onClose, onSignIn, nextPath }: SignInPr
       setView('options');
     }
     else if (view === 'phone-otp') { setView('phone'); }
-    else if (view === 'verify-email') { setView('email'); setIsSignUp(false); }
+    else if (view === 'email-otp') { setView('email'); }
     else setView('options');
   };
 
@@ -365,12 +361,6 @@ export default function SignIn({ isOpen, onClose, onSignIn, nextPath }: SignInPr
                     {errorMsg && <ErrorBanner msg={errorMsg} />}
                     {successMsg && <SuccessBanner msg={successMsg} />}
                     <form onSubmit={handleEmailSubmit} className="space-y-4">
-                      {isSignUp && (
-                        <div className="space-y-1">
-                          <label className="text-sm font-medium text-accent">Full Name</label>
-                          <input type="text" required className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-primary outline-none transition-all bg-gray-50 focus:bg-white" placeholder="Jane Doe" value={formData.fullName} onChange={(e) => setFormData({ ...formData, fullName: e.target.value })} />
-                        </div>
-                      )}
                       <div className="space-y-1">
                         <label className="text-sm font-medium text-accent">Email Address</label>
                         <input type="email" required autoFocus className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-primary outline-none transition-all bg-gray-50 focus:bg-white" placeholder="sarah@example.com" value={formData.email} onChange={(e) => setFormData({ ...formData, email: e.target.value })} />
@@ -395,15 +385,23 @@ export default function SignIn({ isOpen, onClose, onSignIn, nextPath }: SignInPr
                   </motion.div>
                 )}
 
-                {/* Verify Email */}
-                {view === 'verify-email' && (
-                  <motion.div key="verify-email" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} transition={{ duration: 0.2 }} className="flex flex-col items-center text-center">
-                    <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mb-6"><Mail size={32} className="text-primary" /></div>
-                    <h2 className="text-2xl font-display font-bold text-accent mb-3">Check your inbox</h2>
-                    <p className="text-muted text-sm mb-2">We sent a confirmation link to</p>
-                    <p className="font-bold text-accent mb-6">{formData.email}</p>
-                    <p className="text-xs text-muted leading-relaxed">Click the link in the email to activate your account,<br />then come back and sign in.</p>
-                    <button onClick={() => { setView('email'); setIsSignUp(false); clearMessages(); }} className="mt-8 text-sm text-primary font-bold hover:underline">Back to Sign In</button>
+                {/* Email OTP Verify */}
+                {view === 'email-otp' && (
+                  <motion.div key="email-otp" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} transition={{ duration: 0.2 }}>
+                    <EmailOtpVerification
+                      destination={formData.email}
+                      otp={otp}
+                      isLoading={isLoading}
+                      errorMsg={errorMsg}
+                      successMsg={successMsg}
+                      submitLabel="Verify & Create Account"
+                      onOtpChange={handleEmailOtpChange}
+                      onSubmit={handleEmailOtpSubmit}
+                      onResend={handleResendEmailVerification}
+                    />
+                    {isResendingEmail && (
+                      <p className="mt-3 text-center text-xs text-muted">Sending a new code...</p>
+                    )}
                   </motion.div>
                 )}
 
@@ -429,24 +427,17 @@ export default function SignIn({ isOpen, onClose, onSignIn, nextPath }: SignInPr
                 {/* OTP Verify */}
                 {view === 'phone-otp' && (
                   <motion.div key="phone-otp" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} transition={{ duration: 0.2 }}>
-                    <h2 className="text-2xl font-display font-bold text-accent mb-2 text-center">Enter your code</h2>
-                    <p className="text-muted text-center text-sm mb-6">Sent to <span className="font-semibold text-accent">{formData.phone}</span></p>
-                    {errorMsg && <ErrorBanner msg={errorMsg} />}
-                    {successMsg && <SuccessBanner msg={successMsg} />}
-                    <form onSubmit={handleOtpSubmit} className="space-y-6">
-                      <OTPInput value={otp} onChange={handleOtpChange} />
-                      <button
-                        type="submit"
-                        disabled={isLoading || otp.length < 6}
-                        className="w-full btn-primary py-3 rounded-xl flex items-center justify-center gap-2 disabled:opacity-70 transition-opacity"
-                      >
-                        {isLoading ? <Loader2 size={18} className="animate-spin" /> : <>Verify & Sign In <ArrowRight size={18} /></>}
-                      </button>
-                    </form>
-                    <p className="mt-6 text-center text-sm text-muted">
-                      Didn't get it?{' '}
-                      <button onClick={handleResendOtp} className="text-primary font-bold hover:underline">Resend code</button>
-                    </p>
+                    <PhoneVerification
+                      destination={formData.phone}
+                      otp={otp}
+                      isLoading={isLoading}
+                      errorMsg={errorMsg}
+                      successMsg={successMsg}
+                      submitLabel="Verify & Sign In"
+                      onOtpChange={handleOtpChange}
+                      onSubmit={handleOtpSubmit}
+                      onResend={handleResendOtp}
+                    />
                   </motion.div>
                 )}
 

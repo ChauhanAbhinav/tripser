@@ -1,23 +1,13 @@
 import React, { useEffect, useState, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
-import { MapPin, Globe, Trophy, Leaf, Users, Clock, DollarSign, Award, ChevronRight, Loader2, CheckSquare, Square, WalletCards, Receipt, X, Camera, Plus, Archive, RefreshCw, AlertCircle, ChevronDown } from 'lucide-react';
+import { MapPin, Globe, Leaf, Users, ChevronRight, Loader2, CheckSquare, Square, WalletCards, Receipt, X, Plus, Archive, RefreshCw, AlertCircle, ChevronDown, Compass, BookOpen, HeartHandshake, Sparkles, Map as MapIcon, TrendingUp } from 'lucide-react';
 import { api } from '../services/api';
 import { supabase } from '../lib/supabaseClient';
+import { getValidatedAuthSession } from '../lib/authSession';
 import { PACKING_ITEMS, searchItems } from '../lib/packingList';
 import { useToast } from '../components/Toast';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
-
-const STATS = [
-  { label: 'Total Miles', value: '24,500', icon: Globe, color: 'text-blue-500', bg: 'bg-blue-50' },
-  { label: 'Hours Saved by AI', value: '142h', icon: Clock, color: 'text-primary', bg: 'bg-primary/10' },
-  { label: 'Budget Efficiency', value: '+15%', icon: DollarSign, color: 'text-green-500', bg: 'bg-green-50' },
-];
-
-const BADGES = [
-  { id: 1, name: 'Solo Pioneer', desc: 'Completed 5 solo trips', icon: '🌟', unlocked: true },
-  { id: 2, name: 'Safety Sentinel', desc: 'Left 10 safety reviews', icon: '🛡️', unlocked: true },
-  { id: 3, name: 'Hidden Gem Hunter', desc: 'Visited 3 remote spots', icon: '💎', unlocked: false },
-];
 
 const toTitleCase = (str: string) => {
   return str.toLowerCase().split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
@@ -52,11 +42,33 @@ const MOCK_FRIENDS = [
   { id: 'f3', name: 'Alex',  avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Alex' },
 ];
 
+// Custom SVG Circular Progress Ring
+const CircularProgress = ({ value, color, icon: Icon, label }: { value: number, color: string, icon: any, label: string }) => {
+  const radius = 26;
+  const circumference = 2 * Math.PI * radius;
+  const strokeDashoffset = circumference - (value / 100) * circumference;
+
+  return (
+    <div className="flex flex-col items-center">
+      <div className="relative w-20 h-20 flex items-center justify-center mb-3">
+        <svg className="w-full h-full -rotate-90" viewBox="0 0 72 72">
+          <circle cx="36" cy="36" r={radius} stroke="currentColor" strokeWidth="5" fill="transparent" className="text-gray-100" />
+          <motion.circle cx="36" cy="36" r={radius} stroke="currentColor" strokeWidth="5" fill="transparent" className={color} strokeDasharray={circumference} initial={{ strokeDashoffset: circumference }} animate={{ strokeDashoffset }} transition={{ duration: 1.5, ease: "easeOut" }} strokeLinecap="round" />
+        </svg>
+        <div className={`absolute text-xl ${color}`}><Icon size={20} /></div>
+      </div>
+      <span className="text-sm font-bold text-accent whitespace-nowrap">{label}</span>
+      <span className="text-xs text-muted font-medium mt-0.5">{value}/100</span>
+    </div>
+  );
+};
+
 export default function Dashboard() {
   const [profile, setProfile] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'overview' | 'expenses' | 'packing'>('overview');
   const { toast } = useToast();
+  const navigate = useNavigate();
 
   // Packing List State
   const [packingLists, setPackingLists] = useState<PackingListType[]>([]);
@@ -76,23 +88,23 @@ export default function Dashboard() {
   const [isPaidByOpen, setIsPaidByOpen] = useState(false);
   const [isSplitWithOpen, setIsSplitWithOpen] = useState(false);
 
-  // Profile Edit State
-  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
-  const [editName, setEditName] = useState('');
-  const [editAvatarFile, setEditAvatarFile] = useState<File | null>(null);
-  const [editAvatarPreview, setEditAvatarPreview] = useState<string>('');
-  const [isSavingProfile, setIsSavingProfile] = useState(false);
   const [listToDelete, setListToDelete] = useState<string | null>(null);
   const [budgetToDelete, setBudgetToDelete] = useState<string | null>(null);
+  const [aiProfile, setAiProfile] = useState<any>(null);
+  const [isAiLoading, setIsAiLoading] = useState(false);
+  const [upcomingTrip, setUpcomingTrip] = useState<any>(null);
 
   useEffect(() => {
     async function loadData() {
       try {
         const { data: { user } } = await supabase.auth.getUser();
-        if (!user) return;
+        if (!user) {
+          setIsLoading(false);
+          return;
+        }
 
-        const [profileData, listsResponse, budgetRes, expensesRes] = await Promise.all([
-          api.getUserProfile(),
+        const [profileRes, listsResponse, budgetRes, expensesRes, itinsRes] = await Promise.all([
+          supabase.from('profiles').select('*').eq('id', user.id).single(),
           supabase
             .from('packing_lists')
             .select('*')
@@ -108,10 +120,15 @@ export default function Dashboard() {
             .from('expenses')
             .select('*')
             .eq('user_id', user.id)
-            .order('date', { ascending: false })
+            .order('date', { ascending: false }),
+          supabase
+            .from('itineraries')
+            .select('*')
+            .eq('user_id', user.id)
+            .order('start_date', { ascending: true })
         ]);
 
-        setProfile(profileData);
+        if (profileRes.data) setProfile(profileRes.data);
         if (listsResponse.data) {
           setPackingLists(listsResponse.data);
         } else if (listsResponse.error) {
@@ -124,6 +141,39 @@ export default function Dashboard() {
         if (expensesRes.data) {
           setExpenses(expensesRes.data);
         }
+        if (itinsRes.data) {
+          const future = itinsRes.data.find(t => new Date(t.start_date) >= new Date()) || itinsRes.data[0];
+          setUpcomingTrip(future || null);
+        }
+
+        if (profileRes.data?.travel_dna && profileRes.data?.travel_storybook) {
+          // Load instantly from cached database profile
+          setAiProfile({ dna: profileRes.data.travel_dna, storybook: profileRes.data.travel_storybook });
+        } else if ((budgetRes.data && budgetRes.data.length > 0) || (expensesRes.data && expensesRes.data.length > 0)) {
+          // Fire and forget AI analysis if missing
+          setIsAiLoading(true);
+          const apiUrl = import.meta.env.VITE_API_URL || 'http://127.0.0.1:3001';
+          fetch(`${apiUrl}/api/travel/analyze-profile`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              travelData: { budgets: budgetRes.data, expenses: expensesRes.data, packingLists: listsResponse.data }
+            })
+          })
+          .then(res => res.json())
+          .then(async data => {
+            if (data.analysis) {
+              setAiProfile(data.analysis);
+              // Cache the result in the database so it doesn't run on every load
+              await supabase.from('profiles').update({
+                travel_dna: data.analysis.dna,
+                travel_storybook: data.analysis.storybook
+              }).eq('id', user.id);
+            }
+          })
+          .catch(err => console.error("AI Analysis failed", err))
+          .finally(() => setIsAiLoading(false));
+        }
       } catch (error) {
         console.error("Failed to load data", error);
       } finally {
@@ -131,6 +181,19 @@ export default function Dashboard() {
       }
     }
     loadData();
+  }, []);
+
+  // Keep profile in sync if updated from Navbar
+  useEffect(() => {
+    const handleProfileUpdate = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        const { data } = await supabase.from('profiles').select('*').eq('id', user.id).single();
+        if (data) setProfile(data);
+      }
+    };
+    window.addEventListener('profile_updated', handleProfileUpdate);
+    return () => window.removeEventListener('profile_updated', handleProfileUpdate);
   }, []);
 
   // Realtime Expenses Sync
@@ -149,8 +212,8 @@ export default function Dashboard() {
 
   // --- Dynamic Database Handlers ---
   const handleCreateList = async (category: string) => {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session?.user) return;
+    const { user } = await getValidatedAuthSession();
+    if (!user) return;
 
     const newList: PackingListType = {
       id: generateUUID(),
@@ -165,7 +228,7 @@ export default function Dashboard() {
 
     const { error } = await supabase.from('packing_lists').insert({
       id: newList.id,
-      user_id: session.user.id,
+      user_id: user.id,
       category: newList.category,
       completed: newList.completed,
       items: newList.items
@@ -201,62 +264,12 @@ export default function Dashboard() {
     }
   };
 
-  const handleSaveProfile = async () => {
-    setIsSavingProfile(true);
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error("Not authenticated");
-
-      let avatarUrl = profile.avatar_url;
-
-      // If the user selected a new image, upload it to Supabase Storage
-      if (editAvatarFile) {
-        const fileExt = editAvatarFile.name.split('.').pop();
-        const fileName = `${user.id}-${Date.now()}.${fileExt}`;
-        
-        const { error: uploadError } = await supabase.storage
-          .from('avatars')
-          .upload(fileName, editAvatarFile, { upsert: true });
-
-        if (uploadError) throw uploadError;
-
-        const { data: publicUrlData } = supabase.storage
-          .from('avatars')
-          .getPublicUrl(fileName);
-          
-        avatarUrl = publicUrlData.publicUrl;
-      }
-
-      // Update the Database row
-      const { error: updateError } = await supabase
-        .from('profiles')
-        .update({ full_name: editName, avatar_url: avatarUrl })
-        .eq('id', user.id);
-
-      if (updateError) throw updateError;
-
-      // Update Auth User Metadata so the Navbar and session stay in sync seamlessly
-      await supabase.auth.updateUser({
-        data: { full_name: editName, avatar_url: avatarUrl, picture: avatarUrl }
-      });
-
-      setProfile({ ...profile, full_name: editName, avatar_url: avatarUrl });
-      setIsEditModalOpen(false);
-      toast("Profile updated successfully!", "success");
-    } catch (error) {
-      console.error("Error saving profile", error);
-      toast("Failed to save profile. Ensure 'avatars' storage bucket is public.", "error");
-    } finally {
-      setIsSavingProfile(false);
-    }
-  };
-
   const handleSaveBudget = async () => {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session?.user || !budgetForm.amount || !budgetForm.tripName) return;
+    const { user } = await getValidatedAuthSession();
+    if (!user || !budgetForm.amount || !budgetForm.tripName) return;
 
     const { data, error } = await supabase.from('trip_budgets').insert({
-      user_id: session.user.id,
+      user_id: user.id,
       trip_name: toTitleCase(budgetForm.tripName.trim()),
       total_budget: Number(budgetForm.amount),
       currency: 'USD'
@@ -274,11 +287,11 @@ export default function Dashboard() {
   };
 
   const handleSaveExpense = async () => {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session?.user || !expenseForm.amount || !expenseForm.title || !selectedBudgetId) return;
+    const { user } = await getValidatedAuthSession();
+    if (!user || !expenseForm.amount || !expenseForm.title || !selectedBudgetId) return;
 
     const { data, error } = await supabase.from('expenses').insert({
-      user_id: session.user.id,
+      user_id: user.id,
       trip_budget_id: selectedBudgetId,
       amount: Number(expenseForm.amount),
       category: expenseForm.category,
@@ -389,6 +402,11 @@ export default function Dashboard() {
     );
   };
 
+  // Dynamic user tier logic
+  const tqScore = profile?.tq_score || 0;
+  const userRank = tqScore > 500 ? 'Trailblazer' : tqScore > 100 ? 'Explorer' : 'Wanderer';
+  const xpToNext = 100 - (tqScore % 100);
+
   if (isLoading) {
     return (
       <div className="min-h-screen pt-24 pb-12 flex flex-col items-center justify-center bg-gray-50 text-muted">
@@ -405,7 +423,7 @@ export default function Dashboard() {
         {/* Header Section */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 sm:gap-6 mb-8 sm:mb-12">
           <div className="flex items-center gap-6">
-            <div className="w-20 h-20 rounded-full bg-gray-200 overflow-hidden border-4 border-white shadow-lg">
+            <div className="w-20 h-20 rounded-full bg-gray-200 overflow-hidden border-4 border-white shadow-lg shrink-0">
               <img 
                 src={profile?.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${profile?.id || 'traveler'}`} 
                 alt="User Profile" 
@@ -413,23 +431,15 @@ export default function Dashboard() {
               />
             </div>
             <div>
-              <h1 className="text-3xl sm:text-4xl font-display font-bold text-accent">{profile?.full_name || 'Traveler'}</h1>
-              <p className="text-muted mt-1 flex items-center gap-2">
-                <MapPin size={16} /> Currently exploring: <span className="font-medium text-accent">Kyoto, Japan</span>
-              </p>
+              <h1 className="text-3xl sm:text-4xl font-display font-bold text-accent mb-2">{profile?.full_name || 'Traveler'}</h1>
+              <div className="flex flex-wrap items-center gap-2 sm:gap-3 text-sm">
+                <span className="font-bold text-primary bg-primary/10 px-3 py-1 rounded-full">{tqScore} TQ</span>
+                <span className="font-bold text-accent">{userRank}</span>
+                <span className="text-gray-300 hidden sm:inline">•</span>
+                <span className="text-muted font-medium">{xpToNext} XP to next rank</span>
+              </div>
             </div>
           </div>
-          <button 
-            onClick={() => {
-              setEditName(profile?.full_name || '');
-              setEditAvatarPreview(profile?.avatar_url || '');
-              setEditAvatarFile(null);
-              setIsEditModalOpen(true);
-            }}
-            className="w-full sm:w-auto btn-primary py-2.5 sm:py-2 px-6 text-sm sm:text-base"
-          >
-            Edit Profile
-          </button>
         </div>
 
         {/* Tab Navigation */}
@@ -440,125 +450,149 @@ export default function Dashboard() {
         </div>
 
         {activeTab === 'overview' && (
-          <div className="grid lg:grid-cols-3 gap-8">
-          {/* Left Column: Stats & Map */}
-          <div className="lg:col-span-2 space-y-8">
-            
-            {/* Engagement Stats */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              {STATS.map((stat, i) => (
-                <motion.div 
-                  key={stat.label}
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: i * 0.1 }}
-                  className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm"
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-8">
+
+            {/* Top Row: DNA, Progress Rings, Opportunity */}
+            <div className="grid lg:grid-cols-3 gap-6 sm:gap-8">
+
+              {/* Travel DNA */}
+              <div className="bg-gradient-to-br from-primary/10 to-secondary/10 p-6 sm:p-8 rounded-3xl border border-primary/20 relative overflow-hidden flex flex-col justify-between h-full">
+                <Sparkles className="absolute top-4 right-4 text-primary opacity-20" size={64} />
+                {aiProfile?.dna ? (
+                  <div className="relative z-10">
+                    <span className="text-xs font-bold uppercase tracking-widest text-primary mb-6 flex items-center gap-2">
+                      Travel DNA {isAiLoading && <Loader2 size={12} className="animate-spin" />}
+                    </span>
+                    <div className="flex items-center gap-4 mb-4">
+                      <span className="text-5xl">{aiProfile?.dna?.icon || '✈️'}</span>
+                      <div>
+                        <h4 className="text-2xl font-display font-bold text-accent leading-tight">{aiProfile?.dna?.title}</h4>
+                        <p className="text-sm text-primary font-bold mt-1">{aiProfile?.dna?.subtitle}</p>
+                      </div>
+                    </div>
+                    <p className="text-sm text-muted leading-relaxed mt-4">
+                      {aiProfile?.dna?.description}
+                    </p>
+                  </div>
+                ) : (
+                  <div className="relative z-10 flex flex-col items-center justify-center text-center h-full">
+                    <Sparkles size={32} className="text-primary mb-3 opacity-50" />
+                    <h4 className="text-xl font-display font-bold text-accent mb-2">Discover Your DNA</h4>
+                    <p className="text-sm text-muted">Log expenses or packing lists on your trips to let AI generate your unique travel personality.</p>
+                  </div>
+                )}
+              </div>
+
+              {/* Progress Rings */}
+              <div className="bg-white p-6 sm:p-8 rounded-3xl border border-gray-100 shadow-sm flex flex-col justify-between h-full">
+                <h3 className="font-bold text-accent mb-6 flex items-center gap-2"><TrendingUp size={18} className="text-primary"/> Growth Dimensions</h3>
+                <div className="grid grid-cols-2 gap-y-6 gap-x-4">
+                  <CircularProgress value={profile?.diversity_score || 0} color="text-blue-500" icon={Globe} label="Diversity" />
+                  <CircularProgress value={profile?.tq_score ? Math.min(profile.tq_score / 10, 100) : 0} color="text-primary" icon={MapPin} label="Discovery" />
+                  <CircularProgress value={profile?.sustainability_index || 0} color="text-orange-500" icon={Leaf} label="Immersion" />
+                  <CircularProgress value={profile?.community_karma ? Math.min((profile.community_karma / 20), 100) : 0} color="text-purple-500" icon={Users} label="Karma" />
+                </div>
+              </div>
+
+              {/* Smart Opportunity */}
+              <div className="bg-accent text-white p-6 sm:p-8 rounded-3xl shadow-xl relative overflow-hidden flex flex-col justify-between h-full">
+                <div className="absolute -bottom-6 -right-6 opacity-10">
+                  <Compass size={140} />
+                </div>
+                <div className="relative z-10">
+                  <span className="bg-white/20 px-3 py-1 rounded-full text-[10px] font-bold tracking-wider uppercase mb-6 inline-block">
+                    {upcomingTrip ? 'Upcoming Trip' : 'Start Planning'}
+                  </span>
+                  <h4 className="font-bold text-2xl mb-3">{upcomingTrip ? upcomingTrip.title : 'Ready for an adventure?'}</h4>
+                  <p className="text-gray-300 text-sm leading-relaxed mb-8">
+                    {upcomingTrip ? `Your trip to ${upcomingTrip.destination} is coming up. Let's make sure your packing list and budget are ready.` : 'Discover hidden gems and let our AI craft the perfect itinerary for your first trip.'}
+                  </p>
+                  <button onClick={() => navigate(upcomingTrip ? '/planner' : '/discovery')} className="bg-white text-accent w-full py-3 rounded-xl text-sm font-bold hover:bg-gray-50 transition-colors">
+                    {upcomingTrip ? 'Manage Trip' : 'Discover Places'}
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Bottom Row: Scratch Map & Storybook */}
+            <div className="grid lg:grid-cols-3 gap-6 sm:gap-8">
+
+              {/* World Scratch Map */}
+              <div className="lg:col-span-2 bg-white p-2 rounded-3xl shadow-sm border border-gray-100 overflow-hidden relative min-h-[400px]">
+                <div className="absolute top-8 left-8 z-10 bg-white/90 backdrop-blur px-4 py-2 rounded-xl shadow-sm">
+                  <h3 className="font-bold text-accent flex items-center gap-2">
+                    <MapIcon size={18} className="text-primary" />
+                    World Scratch Map
+                  </h3>
+                </div>
+                <div className="w-full h-full bg-slate-100 rounded-2xl relative overflow-hidden flex items-center justify-center">
+                  <img
+                    src="https://images.unsplash.com/photo-1524661135-423995f22d0b?auto=format&fit=crop&q=80&w=1200"
+                    alt="Map Placeholder"
+                    className="absolute inset-0 w-full h-full object-cover opacity-60 grayscale"
+                  />
+                  <button onClick={() => navigate('/discovery?view=map')} className="relative z-10 bg-accent text-white px-6 py-3 rounded-full font-bold flex items-center gap-2 hover:scale-105 transition-transform shadow-xl">
+                    Explore Destinations Map <ChevronRight size={18} />
+                  </button>
+                </div>
+              </div>
+
+              {/* Right Column: Storybook & Impact */}
+              <div className="space-y-6 sm:space-y-8 flex flex-col">
+                <div className="bg-white p-6 sm:p-8 rounded-3xl shadow-sm border border-gray-100 flex-1">
+                  <div className="flex justify-between items-center mb-6">
+                     <h3 className="font-bold text-accent flex items-center gap-2"><BookOpen size={20} className="text-primary"/> Travel Storybook</h3>
+                  </div>
+                  {aiProfile?.storybook ? (
+                    <div className="rounded-2xl bg-gray-50 border border-gray-100 p-5 group cursor-pointer hover:bg-white hover:shadow-md transition-all relative overflow-hidden">
+                       {isAiLoading && <div className="absolute top-4 right-4 text-primary/40"><Loader2 size={16} className="animate-spin" /></div>}
+                       <div className="flex justify-between items-start mb-4">
+                         <div>
+                           <h4 className="font-bold text-lg text-accent group-hover:text-primary transition-colors">{aiProfile?.storybook?.title}</h4>
+                           <p className="text-xs text-muted font-medium mt-1">{aiProfile?.storybook?.subtitle}</p>
+                         </div>
+                         <span className="bg-white px-2 py-1 rounded-md text-[10px] font-bold shadow-sm uppercase tracking-wider text-muted">{aiProfile?.storybook?.season}</span>
+                       </div>
+                       <div className="space-y-3">
+                         <div className="bg-white p-3 rounded-xl border border-gray-100 text-sm">
+                           <span className="text-muted block text-[10px] font-bold uppercase tracking-wider mb-1">Favorite Moment</span>
+                           <span className="font-bold text-accent">{aiProfile?.storybook?.favoriteMoment}</span>
+                         </div>
+                         <div className="flex flex-wrap gap-2">
+                           <span className="bg-blue-50 text-blue-600 px-2 py-1 rounded-lg text-xs font-bold">{aiProfile?.storybook?.growthDiscovery} Discovery</span>
+                           <span className="bg-orange-50 text-orange-600 px-2 py-1 rounded-lg text-xs font-bold">{aiProfile?.storybook?.growthImmersion} Immersion</span>
+                         </div>
+                       </div>
+                    </div>
+                  ) : (
+                    <div className="rounded-2xl border-2 border-dashed border-gray-200 p-8 flex-1 flex flex-col items-center justify-center text-center text-muted">
+                      <BookOpen size={32} className="mb-3 opacity-20" />
+                      <p className="font-medium">Your story awaits</p>
+                      <p className="text-xs mt-1">Complete a trip to unlock your personalized storybook.</p>
+                    </div>
+                  )}
+                </div>
+
+                <div
+                  onClick={() => navigate('/community')}
+                  className="bg-white p-6 sm:p-8 rounded-3xl shadow-sm border border-gray-100 flex justify-between items-center gap-4 cursor-pointer hover:border-primary/50 transition-all group"
                 >
-                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center mb-4 ${stat.bg} ${stat.color}`}>
-                    <stat.icon size={20} />
-                  </div>
-                  <p className="text-sm font-bold text-muted uppercase tracking-wider">{stat.label}</p>
-                  <p className="text-3xl font-display font-bold text-accent mt-1">{stat.value}</p>
-                </motion.div>
-              ))}
-            </div>
-
-            {/* 3D Map Placeholder */}
-            <div className="bg-white p-2 rounded-3xl shadow-sm border border-gray-100 overflow-hidden relative">
-              <div className="absolute top-8 left-8 z-10 bg-white/90 backdrop-blur px-4 py-2 rounded-xl shadow-sm">
-                <h3 className="font-bold text-accent flex items-center gap-2">
-                  <Globe size={18} className="text-primary" />
-                  Visited Places Scratch Map
-                </h3>
-              </div>
-              {/* This is a placeholder for the future Mapbox 3D integration */}
-              <div className="w-full h-[400px] bg-slate-100 rounded-2xl relative overflow-hidden flex items-center justify-center">
-                <img 
-                  src="https://images.unsplash.com/photo-1524661135-423995f22d0b?auto=format&fit=crop&q=80&w=1200" 
-                  alt="Map Placeholder" 
-                  className="absolute inset-0 w-full h-full object-cover opacity-50 grayscale"
-                />
-                <button className="relative z-10 bg-accent text-white px-6 py-3 rounded-full font-medium flex items-center gap-2 hover:scale-105 transition-transform shadow-xl">
-                  Unlock Interactive 3D Map
-                </button>
-              </div>
-            </div>
-          </div>
-
-          {/* Right Column: TQ & Badges */}
-          <div className="space-y-8">
-            
-            {/* Traveler Quotient (TQ) */}
-            <div className="bg-accent text-white p-6 sm:p-8 rounded-3xl shadow-xl relative overflow-hidden">
-              <div className="relative z-10">
-                <div className="flex justify-between items-center mb-8">
-                  <h3 className="text-xl font-bold">Traveler Quotient</h3>
-                  <span className="text-3xl font-display font-bold text-primary">{profile?.tq_score || 84}</span>
-                </div>
-
-                <div className="space-y-6">
-                  <div>
-                    <div className="flex justify-between text-sm mb-2">
-                      <span className="flex items-center gap-2"><Leaf size={16} className="text-green-400" /> Sustainability</span>
-                      <span className="font-bold">{profile?.sustainability_index || 92}/100</span>
+                  <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 bg-green-50 text-green-500 rounded-full flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
+                      <HeartHandshake size={24} />
                     </div>
-                    <div className="w-full bg-white/20 h-2 rounded-full overflow-hidden">
-                      <div className="bg-green-400 h-full" style={{ width: `${profile?.sustainability_index || 92}%` }} />
+                    <div>
+                      <h4 className="font-bold text-accent mb-1">Community Impact</h4>
+                      <p className="text-sm text-muted leading-snug">
+                        <span className="font-bold text-accent">{profile?.community_karma || 0} travelers</span> found your insights helpful.
+                      </p>
                     </div>
                   </div>
-
-                  <div>
-                    <div className="flex justify-between text-sm mb-2">
-                      <span className="flex items-center gap-2"><Globe size={16} className="text-blue-400" /> Diversity Score</span>
-                      <span className="font-bold">{profile?.diversity_score || 75}/100</span>
-                    </div>
-                    <div className="w-full bg-white/20 h-2 rounded-full overflow-hidden">
-                      <div className="bg-blue-400 h-full" style={{ width: `${profile?.diversity_score || 75}%` }} />
-                    </div>
-                  </div>
-
-                  <div>
-                    <div className="flex justify-between text-sm mb-2">
-                      <span className="flex items-center gap-2"><Users size={16} className="text-purple-400" /> Community Karma</span>
-                      <span className="font-bold">{profile?.community_karma || 1250} pts</span>
-                    </div>
-                    <div className="w-full bg-white/20 h-2 rounded-full overflow-hidden">
-                      <div className="bg-purple-400 h-full" style={{ width: `${Math.min((profile?.community_karma || 1250) / 20, 100)}%` }} />
-                    </div>
-                  </div>
+                  <ChevronRight size={20} className="text-gray-300 group-hover:text-primary transition-colors" />
                 </div>
               </div>
-              <div className="absolute -bottom-10 -right-10 opacity-10">
-                <Trophy size={150} />
-              </div>
             </div>
-
-            {/* Achievement Badges */}
-            <div className="bg-white p-6 sm:p-8 rounded-3xl border border-gray-100 shadow-sm">
-              <div className="flex justify-between items-center mb-6">
-                <h3 className="font-bold text-accent flex items-center gap-2">
-                  <Award size={20} className="text-primary" />
-                  Digital Trophies
-                </h3>
-                <button className="text-sm text-primary font-bold hover:underline">View All</button>
-              </div>
-
-              <div className="space-y-4">
-                {BADGES.map((badge) => (
-                  <div key={badge.id} className={`flex items-center gap-4 p-4 rounded-2xl border ${badge.unlocked ? 'border-primary/20 bg-primary/5' : 'border-gray-100 bg-gray-50 opacity-60'}`}>
-                    <div className="w-12 h-12 rounded-full bg-white shadow-sm flex items-center justify-center text-2xl border border-gray-100">
-                      {badge.icon}
-                    </div>
-                    <div className="flex-1">
-                      <h4 className="font-bold text-accent text-sm">{badge.name}</h4>
-                      <p className="text-xs text-muted mt-0.5">{badge.desc}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
+          </motion.div>
         )}
 
         {activeTab === 'expenses' && (
@@ -621,8 +655,8 @@ export default function Dashboard() {
                           <div className={`h-full transition-all ${pctSpent > 100 ? 'bg-red-500' : pctSpent > 75 ? 'bg-amber-500' : 'bg-primary'}`} style={{ width: `${Math.min(pctSpent, 100)}%` }} />
                         </div>
                         <div className="space-y-3">
-                          {chartData.map((d, i) => (
-                            <div key={i} className="flex items-center justify-between text-sm">
+                          {chartData.map((d) => (
+                            <div key={d.name} className="flex items-center justify-between text-sm">
                               <div className="flex items-center gap-2">
                                 <div className="w-3 h-3 rounded-full" style={{ backgroundColor: d.hex }} />
                                 <span className="text-muted font-medium">{d.name}</span>
@@ -637,11 +671,11 @@ export default function Dashboard() {
                           <ResponsiveContainer width="100%" height="100%">
                             <PieChart>
                               <Pie data={chartData} cx="50%" cy="50%" innerRadius="60%" outerRadius="80%" paddingAngle={5} dataKey="value">
-                                {chartData.map((entry, index) => (
-                                  <Cell key={`cell-${index}`} fill={entry.hex} />
+                                    {chartData.map((entry) => (
+                                      <Cell key={`cell-${entry.name}`} fill={entry.hex} />
                                 ))}
                               </Pie>
-                              <Tooltip formatter={(value: any) => `$${Number(value).toFixed(2)}`} />
+                                  <Tooltip formatter={(value) => `$${Number(value).toFixed(2)}`} />
                             </PieChart>
                           </ResponsiveContainer>
                         </div>
@@ -984,73 +1018,6 @@ export default function Dashboard() {
           </motion.div>
         )}
       </div>
-
-      {/* Edit Profile Modal */}
-      <AnimatePresence>
-        {isEditModalOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              className="bg-white rounded-3xl p-6 sm:p-8 w-full max-w-md shadow-2xl relative z-10 overflow-visible"
-            >
-              <div className="flex justify-between items-center mb-6">
-                <h3 className="text-xl font-bold text-accent">Edit Profile</h3>
-                <button onClick={() => setIsEditModalOpen(false)} className="text-gray-400 hover:text-accent bg-gray-50 hover:bg-gray-100 p-2 rounded-full transition-colors">
-                  <X size={20} />
-                </button>
-              </div>
-
-              <div className="space-y-6">
-                <div className="flex flex-col items-center">
-                  <div className="relative w-28 h-28 rounded-full overflow-hidden border-4 border-gray-50 mb-4 group cursor-pointer shadow-sm">
-                    <img 
-                      src={editAvatarPreview || `https://api.dicebear.com/7.x/avataaars/svg?seed=${profile?.id || 'traveler'}`} 
-                      alt="Preview" 
-                      className="w-full h-full object-cover bg-gray-100" 
-                    />
-                    <div className="absolute inset-0 bg-black/40 flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                      <Camera size={24} className="text-white mb-1" />
-                      <span className="text-white text-xs font-bold">Change</span>
-                    </div>
-                    <input 
-                      type="file" 
-                      accept="image/*" 
-                      className="absolute inset-0 opacity-0 cursor-pointer"
-                      onChange={(e) => {
-                        const file = e.target.files?.[0];
-                        if (file) {
-                          setEditAvatarFile(file);
-                          setEditAvatarPreview(URL.createObjectURL(file));
-                        }
-                      }}
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-accent mb-2">Full Name</label>
-                  <input 
-                    type="text" 
-                    value={editName}
-                    onChange={(e) => setEditName(e.target.value)}
-                    className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-primary outline-none transition-all bg-gray-50 focus:bg-white text-accent font-medium"
-                  />
-                </div>
-
-                <button 
-                  onClick={handleSaveProfile}
-                  disabled={isSavingProfile}
-                  className="w-full btn-primary py-3.5 flex items-center justify-center gap-2 rounded-xl text-base disabled:opacity-70 transition-all"
-                >
-                  {isSavingProfile ? <Loader2 size={20} className="animate-spin" /> : 'Save Changes'}
-                </button>
-              </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
 
       {/* Delete Confirmation Modal */}
       <AnimatePresence>

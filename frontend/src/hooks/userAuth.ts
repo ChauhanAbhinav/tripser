@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { User, Session, AuthChangeEvent } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabaseClient'; // adjust path as needed
+import { getValidatedAuthSession } from '../lib/authSession';
 
 interface AuthState {
   user: User | null;
@@ -15,10 +16,10 @@ export function useAuth(): AuthState {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    // 1. Grab the current session on mount (handles page refresh)
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    // 1. Validate the current session on mount (handles stale sessions after DB resets)
+    getValidatedAuthSession().then(({ session, user }) => {
       setSession(session);
-      setUser(session?.user ?? null);
+      setUser(user);
       setIsLoading(false);
     });
 
@@ -26,10 +27,21 @@ export function useAuth(): AuthState {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(
-      (_event: AuthChangeEvent, session: Session | null) => {
-        setSession(session);
-        setUser(session?.user ?? null);
-        setIsLoading(false);
+      (event: AuthChangeEvent, session: Session | null) => {
+        if (!session || event === 'SIGNED_OUT') {
+          setSession(null);
+          setUser(null);
+          setIsLoading(false);
+          return;
+        }
+
+        setTimeout(() => {
+          getValidatedAuthSession().then(({ session: validatedSession, user }) => {
+            setSession(validatedSession);
+            setUser(user);
+            setIsLoading(false);
+          });
+        }, 0);
       }
     );
 

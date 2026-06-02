@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { getTravelAdvice, getStructuredDestinations } from '../services/gemini';
 import { api } from '../services/api';
+import { supabase } from '../lib/supabaseClient';
 
 interface Destination {
   id: number;
@@ -35,9 +36,9 @@ const normalizeGem = (gem: any): Destination => ({
   description: gem.description || '',
   image: gem.image_url || gem.image || '',
   price: gem.price_range || gem.price || 'N/A',
-  safety: gem.safety_score ?? gem.safety ?? 0,
-  accessibility: gem.accessibility_score ?? gem.accessibility ?? 0,
-  sensory: gem.sensory_score ?? gem.sensory ?? 0,
+  safety: Number(gem.safety_score ?? gem.safety ?? 0),
+  accessibility: Number(gem.accessibility_score ?? gem.accessibility ?? 0),
+  sensory: Number(gem.sensory_score ?? gem.sensory ?? 0),
   tags: gem.tags || [],
 });
 
@@ -49,6 +50,29 @@ const applyFilters = (destinations: Destination[], filters: Filters): Destinatio
     return true;
   });
 };
+
+const FALLBACK_GEMS: Destination[] = [
+  {
+    id: 1,
+    name: 'Kotor Old Town',
+    location: 'Montenegro',
+    description: 'A walled medieval city on the Adriatic coast, far less crowded than Dubrovnik.',
+    image: 'https://images.unsplash.com/photo-1555990793-da11153b2473?w=800&auto=format',
+    price: '$800 - $1,200',
+    safety: 9.2, accessibility: 7.5, sensory: 8.0,
+    tags: ['Hidden Gem', 'Safe', 'Historic']
+  },
+  {
+    id: 2,
+    name: 'Matera',
+    location: 'Italy',
+    description: 'Ancient cave city carved into rock — eerily beautiful at night.',
+    image: 'https://images.unsplash.com/photo-1533421644343-45b606a69f48?w=800&auto=format',
+    price: '$900 - $1,400',
+    safety: 8.8, accessibility: 6.5, sensory: 9.1,
+    tags: ['UNESCO', 'Quiet', 'Unique']
+  }
+];
 
 export default function Discovery() {
   const [searchParams] = useSearchParams();
@@ -71,11 +95,21 @@ export default function Discovery() {
   const loadDatabaseGems = useCallback(async () => {
     setLoading(true);
     try {
-      const dbGems = await api.getHiddenGems();
-      if (dbGems && dbGems.length > 0) {
+      let dbGems: any[] | null = null;
+      try { dbGems = await api.getHiddenGems(); } catch (e) {}
+      
+      if (!dbGems || dbGems.length === 0) {
+        const { data } = await supabase.from('hidden_gems').select('*');
+        if (data) dbGems = data;
+      }
+
+      if (Array.isArray(dbGems) && dbGems.length > 0) {
         const normalized = dbGems.map(normalizeGem);
         setAllDestinations(normalized);
         setDestinations(applyFilters(normalized, filters));
+      } else {
+        setAllDestinations(FALLBACK_GEMS);
+        setDestinations(applyFilters(FALLBACK_GEMS, filters));
       }
     } catch (err) {
       console.error('Failed to load hidden gems:', err);
@@ -112,10 +146,13 @@ export default function Discovery() {
 
       setAiAdvice(advice || 'Here are some curated suggestions based on your search.');
 
-      if (structuredData && Array.isArray(structuredData) && structuredData.length > 0) {
+      if (Array.isArray(structuredData) && structuredData.length > 0) {
         const normalized = structuredData.map(normalizeGem);
         setAllDestinations(normalized);
         setDestinations(applyFilters(normalized, filters));
+      } else {
+        setAllDestinations(FALLBACK_GEMS);
+        setDestinations(applyFilters(FALLBACK_GEMS, filters));
       }
     } catch (err) {
       console.error('AI search failed:', err);

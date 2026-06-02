@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { getTravelAdvice, getStructuredDestinations, generatePivotItinerary } from '../services/geminiService.js';
+import { getTravelAdvice, getStructuredDestinations, generatePivotItinerary, generateTravelProfileAnalysis } from '../services/geminiService.js';
 
 export const getAdvice = async (req: Request, res: Response) => {
   try {
@@ -31,5 +31,16 @@ export const pivotItinerary = async (req: Request, res: Response) => {
   } catch (error) {
     console.error('[TravelController] pivotItinerary Error:', error);
     res.status(500).json({ error: 'Failed to pivot itinerary' });
+  }
+};
+
+export const analyzeProfile = async (req: Request, res: Response) => {
+  try {
+    const { travelData } = req.body;
+    const analysis = await generateTravelProfileAnalysis(travelData);
+    res.json({ analysis });
+  } catch (error) {
+    console.error('[TravelController] analyzeProfile Error:', error);
+    res.status(500).json({ error: 'Failed to analyze profile' });
   }
 };

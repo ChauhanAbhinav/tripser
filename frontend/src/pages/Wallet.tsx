@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { ShieldCheck, WifiOff, FileText, QrCode, Lock, Plane, Download, ChevronRight, Fingerprint } from 'lucide-react';
 import { api } from '../services/api';
+import { supabase } from '../lib/supabaseClient';
 
 export default function Wallet() {
   const [isUnlocked, setIsUnlocked] = useState(false);
@@ -16,7 +17,15 @@ export default function Wallet() {
     async function loadDocuments() {
       if (isUnlocked) {
         try {
-          const fetchedDocs = await api.getTravelDocuments();
+          let fetchedDocs: any[] | null = null;
+          try { fetchedDocs = await api.getTravelDocuments(); } catch (e) {}
+          if (!fetchedDocs || fetchedDocs.length === 0) {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (user) {
+              const { data } = await supabase.from('travel_documents').select('*').eq('user_id', user.id);
+              if (data) fetchedDocs = data;
+            }
+          }
           if (fetchedDocs && fetchedDocs.length > 0) {
             setDocuments(fetchedDocs);
           }

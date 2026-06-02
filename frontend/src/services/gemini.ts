@@ -1,5 +1,5 @@
 // We now communicate with our secure backend instead of hitting Gemini directly
-const BACKEND_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001/api/travel';
+const BACKEND_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:5001/api/travel';
 
 export async function getTravelAdvice(prompt: string) {
   try {

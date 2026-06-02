@@ -148,9 +148,9 @@ export default function Planner() {
           {/* Vertical Line */}
           <div className="absolute left-6 sm:left-8 top-0 bottom-0 w-0.5 bg-gray-200 -z-10" />
 
-          <Reorder.Group<ItineraryItem[]> axis="y" values={items} onReorder={setItems} className="space-y-6">
+          <Reorder.Group axis="y" values={items} onReorder={setItems} className="space-y-6">
             {items.map((item) => (
-              <Reorder.Item<ItineraryItem>
+              <Reorder.Item
                 key={item.id}
                 value={item}
                 className="relative pl-12 sm:pl-20"

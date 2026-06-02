@@ -50,12 +50,16 @@ export default function AuthCallback() {
       if (sessionError || !session) {
         // Session not ready yet — wait for onAuthStateChange to fire
         const { data: { subscription } } = supabase.auth.onAuthStateChange(
-          async (event, session) => {
+          (_event, session) => {
             if (session) {
               subscription.unsubscribe();
-              await upsertProfile(session.user);
-              const next = url.searchParams.get('next') || '/';
-              navigate(next, { replace: true });
+              setTimeout(() => {
+                void (async () => {
+                  await upsertProfile(session.user);
+                  const next = url.searchParams.get('next') || '/';
+                  navigate(next, { replace: true });
+                })();
+              }, 0);
             }
           }
         );
@@ -93,30 +97,33 @@ export default function AuthCallback() {
 async function upsertProfile(user: any) {
   if (!user) return;
 
-  const fullName =
-    user.user_metadata?.full_name ||
-    user.user_metadata?.name ||        // Google sends 'name'
-    user.phone ||                       // Phone auth fallback
-    'Traveler';
+  // Fetch existing profile to preserve manually updated fields
+  const { data: existingProfile } = await supabase
+    .from('profiles')
+    .select('*')
+    .eq('id', user.id)
+    .maybeSingle();
 
-  const avatarUrl =
-    user.user_metadata?.avatar_url ||
-    user.user_metadata?.picture ||      // Google sends 'picture'
-    `https://api.dicebear.com/7.x/avataaars/svg?seed=${user.id}`;
+  const updates: any = { id: user.id };
+
+  const isDefaultName = !existingProfile?.full_name || existingProfile.full_name === 'Traveler' || existingProfile.full_name === user.phone || existingProfile.full_name === user.email;
+  if (isDefaultName) {
+    updates.full_name = user.user_metadata?.full_name || user.user_metadata?.name || user.phone || 'Traveler';
+  }
+
+  if (!existingProfile?.avatar_url || existingProfile.avatar_url?.includes('dicebear')) {
+    updates.avatar_url = user.user_metadata?.avatar_url || user.user_metadata?.picture || `https://api.dicebear.com/7.x/avataaars/svg?seed=${user.id}`;
+  }
+  if (user.phone && !existingProfile?.phone) {
+    updates.phone = user.phone;
+  }
+
+  const payload = existingProfile ? { ...existingProfile, ...updates, id: user.id } : { ...updates, id: user.id };
 
   const { error } = await supabase
     .from('profiles')
-    .upsert(
-      {
-        id: user.id,
-        full_name: fullName,
-        avatar_url: avatarUrl,
-      },
-      {
-        onConflict: 'id',
-        ignoreDuplicates: false, // always update name/avatar if changed
-      }
-    );
+    .upsert(payload, { onConflict: 'id' });
 
   if (error) console.error('Profile upsert error:', error.message);
+  else window.dispatchEvent(new Event('profile_check_requested'));
 }

@@ -5,8 +5,8 @@ import {
   MessageSquare, Plus, CheckCircle2, Loader2,
   Wifi, WifiOff, Sparkles
 } from 'lucide-react';
-import { supabase } from '../lib/supabaseClient'; // adjust path as needed
-import { useAuth } from '../hooks/userAuth'; // adjust path as needed
+import { supabase } from '../lib/supabaseClient';
+import { getValidatedAuthSession } from '../lib/authSession';
 import { useToast } from '../components/Toast';
 
 // ---------------------------------------------------------------------------
@@ -105,38 +105,63 @@ function NewBadge() {
 // ---------------------------------------------------------------------------
 
 export default function Community() {
-  const { user } = useAuth();
   const { toast } = useToast();
 
+  const [user, setUser] = useState<any>(null);
   const [boards, setBoards] = useState<VotingBoard[]>([]);
   const [vibes, setVibes] = useState<LiveVibe[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [realtimeConnected, setRealtimeConnected] = useState(false);
   const [votingInProgress, setVotingInProgress] = useState<Set<number>>(new Set());
 
-  // Track new-item IDs so we can flash the "New" badge briefly
   const newVibeIds = useRef<Set<number>>(new Set());
   const [, forceUpdate] = useState(0);
 
   // -------------------------------------------------------------------------
-  // Initial Data Load
+  // Auth — track user but don't gate data fetching on it
   // -------------------------------------------------------------------------
 
-  const loadBoards = useCallback(async () => {
-    const { data: boardData } = await supabase
-      .from('voting_boards')
-      .select('*, voting_options(*)')
-      .order('created_at', { ascending: false });
+  useEffect(() => {
+    getValidatedAuthSession().then(({ user }) => {
+      setUser(user);
+    });
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (!session || event === 'SIGNED_OUT') {
+        setUser(null);
+        return;
+      }
+
+      setTimeout(() => {
+        getValidatedAuthSession().then(({ user }) => {
+          setUser(user);
+        });
+      }, 0);
+    });
+    return () => subscription.unsubscribe();
+  }, []);
+
+  // -------------------------------------------------------------------------
+  // Data Fetching — user passed as param, NOT as dependency
+  // -------------------------------------------------------------------------
+
+  // FIX: user removed from dependency array — loadBoards no longer recreates on auth change.
+  // Instead, user is passed explicitly so the function always has the latest value.
+  const loadBoards = useCallback(async (currentUser: any) => {
+  console.log('📋 loadBoards called, user:', currentUser?.id || 'null'); // ← ADD HERE
+  const { data: boardData, error } = await supabase  // ← add error here too
+    .from('voting_boards')
+    .select('*, voting_options(*)')
+    .order('created_at', { ascending: false });
+  console.log('📋 boardData:', boardData, 'error:', error); // ← ADD HERE
 
     if (!boardData) return;
 
-    // Fetch which options the current user has voted for
     let votedOptionIds: Set<number> = new Set();
-    if (user) {
+    if (currentUser) {
       const { data: votes } = await supabase
         .from('user_votes')
         .select('option_id')
-        .eq('user_id', user.id);
+        .eq('user_id', currentUser.id);
       if (votes) votes.forEach(v => votedOptionIds.add(v.option_id));
     }
 
@@ -146,13 +171,13 @@ export default function Community() {
         title: b.title,
         category: b.category,
         members: b.members,
-        options: (b.voting_options as VotingOption[]).map(opt => ({
+        options: ((b.voting_options || []) as VotingOption[]).map(opt => ({
           ...opt,
           hasVoted: votedOptionIds.has(opt.id),
         })),
       }))
     );
-  }, [user]);
+  }, []); // ← no user dependency
 
   const loadVibes = useCallback(async () => {
     const { data } = await supabase
@@ -169,7 +194,7 @@ export default function Community() {
         user: v.profiles?.full_name || 'Anonymous Traveler',
         location: v.location,
         time: timeAgo(v.created_at),
-        safety: v.safety_score,
+        safety: Number(v.safety_score),
         sensory: v.sensory_status,
         message: v.message,
         tags: v.tags || [],
@@ -177,21 +202,33 @@ export default function Community() {
     );
   }, []);
 
+  // Initial load — runs once on mount
   useEffect(() => {
+      console.log('🚀 [Community] init effect fired');
     async function init() {
       setIsLoading(true);
-      await Promise.all([loadBoards(), loadVibes()]);
-      setIsLoading(false);
+      try {
+        // Pass null initially — boards still load for anon users
+        // voted state will be refreshed once user is known (effect below)
+        await Promise.all([loadBoards(null), loadVibes()]);
+      } finally {
+        setIsLoading(false);
+      }
     }
     init();
   }, [loadBoards, loadVibes]);
+
+  // FIX: when user signs in (or is restored from session on refresh),
+  // reload boards with their voted state — without affecting the loading spinner
+  useEffect(() => {
+    if (user) loadBoards(user);
+  }, [user, loadBoards]);
 
   // -------------------------------------------------------------------------
   // Supabase Realtime Subscriptions
   // -------------------------------------------------------------------------
 
   useEffect(() => {
-    // --- Channel: Live Vibes ---
     const vibesChannel = supabase
       .channel('community:live_vibes')
       .on(
@@ -200,7 +237,6 @@ export default function Community() {
         async (payload) => {
           const row = payload.new as any;
 
-          // Fetch the poster's profile
           const { data: profile } = await supabase
             .from('profiles')
             .select('full_name')
@@ -212,7 +248,7 @@ export default function Community() {
             user: profile?.full_name || 'Anonymous Traveler',
             location: row.location,
             time: 'just now',
-            safety: row.safety_score,
+            safety: Number(row.safety_score),
             sensory: row.sensory_status,
             message: row.message,
             tags: row.tags || [],
@@ -222,7 +258,6 @@ export default function Community() {
           newVibeIds.current.add(row.id);
           setVibes(prev => [newVibe, ...prev.slice(0, 19)]);
 
-          // Remove "New" badge after 8 seconds
           setTimeout(() => {
             newVibeIds.current.delete(row.id);
             forceUpdate(n => n + 1);
@@ -240,7 +275,6 @@ export default function Community() {
         setRealtimeConnected(status === 'SUBSCRIBED');
       });
 
-    // --- Channel: Voting Options ---
     const votesChannel = supabase
       .channel('community:voting_options')
       .on(
@@ -274,7 +308,6 @@ export default function Community() {
       )
       .subscribe();
 
-    // --- Channel: Voting Boards (new boards) ---
     const boardsChannel = supabase
       .channel('community:voting_boards')
       .on(
@@ -341,7 +374,7 @@ export default function Community() {
   // -------------------------------------------------------------------------
   // Render
   // -------------------------------------------------------------------------
-
+console.log('🎨 [Community] render — boards:', boards.length, 'isLoading:', isLoading);
   return (
     <div className="min-h-screen pt-24 pb-12 bg-gray-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -419,7 +452,6 @@ export default function Community() {
                                 : 'border-gray-100 bg-gray-50 hover:border-gray-200'
                             }`}
                           >
-                            {/* Vote progress bar */}
                             <div
                               className="absolute inset-0 bg-primary/5 transition-all duration-700 ease-out pointer-events-none"
                               style={{ width: `${pct}%` }}
@@ -492,7 +524,6 @@ export default function Community() {
                     layout
                     className="bg-white p-4 sm:p-6 rounded-3xl border border-gray-100 shadow-sm relative overflow-hidden"
                   >
-                    {/* Highlight strip for new vibes */}
                     {newVibeIds.current.has(vibe.id) && (
                       <motion.div
                         initial={{ scaleX: 0 }}

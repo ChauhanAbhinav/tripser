@@ -15,6 +15,7 @@ import Community from './pages/Community';
 import AuthCallback from './pages/AuthCallback';
 import ProtectedRoute from './components/ProtectedRoute';
 import { ToastProvider } from './components/Toast';
+import CompleteProfileModal from './components/CompleteProfileModal';
 
 export default function App() {
   return (
@@ -50,6 +51,9 @@ export default function App() {
 
           {/* Global Safety Layer */}
           <SOSButton />
+          
+          {/* Global Profile Completion */}
+          <CompleteProfileModal />
 
           {/* Footer */}
           <footer className="bg-white pt-24 pb-12 border-t border-gray-100">

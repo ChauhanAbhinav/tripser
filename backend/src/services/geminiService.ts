@@ -83,3 +83,45 @@ export async function generatePivotItinerary(itinerary: any[], disruption: strin
     return null;
   }
 }
+
+export async function generateTravelProfileAnalysis(travelData: any) {
+  try {
+    const prompt = `Analyze the following travel data for a user: ${JSON.stringify(travelData)}.
+    Generate a personalized "Travel DNA" profile and a "Travel Storybook" summary of their trips.
+    Return ONLY a valid JSON object matching exactly this structure:
+    {
+      "dna": {
+        "icon": "emoji",
+        "title": "Short catchy title (e.g., Street Food Hunter)",
+        "subtitle": "2-3 words (e.g., Authentic & Local)",
+        "description": "1 sentence describing their travel style based on data"
+      },
+      "storybook": {
+        "title": "e.g., Your Rome Story",
+        "subtitle": "e.g., 5 Days • 12 Places Visited",
+        "season": "e.g., 🌸 Spring",
+        "favoriteMoment": "A specific memorable moment based on their expenses/packing",
+        "growthDiscovery": "e.g., +8",
+        "growthImmersion": "e.g., +12"
+      }
+    }`;
+    
+    const response = await ai.models.generateContent({
+      model: "gemini-1.5-pro",
+      contents: prompt,
+      config: {
+        systemInstruction: "You are an expert travel behavioral analyst. Output raw JSON only.",
+        responseMimeType: "application/json",
+      },
+    });
+    
+    if (response.text) {
+      const cleanJson = response.text.replace(/```json/gi, '').replace(/```/g, '').trim();
+      return JSON.parse(cleanJson);
+    }
+    return null;
+  } catch (error) {
+    console.error("Gemini API Error in analyze:", error);
+    return null;
+  }
+}

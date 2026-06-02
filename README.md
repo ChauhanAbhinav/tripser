@@ -78,7 +78,7 @@ GEMINI_API_KEY=your-gemini-api-key
 # From: pinecone.io → API Keys
 PINECONE_API_KEY=your-pinecone-api-key
 
-FRONTEND_URL=http://localhost:3000
+FRONTEND_URL=http://127.0.0.1:3000
 ```
 
 ### Frontend — `frontend/.env`
@@ -89,10 +89,10 @@ cp frontend/.env.example frontend/.env
 
 ```bash
 # From: supabase.com → Project Settings → API
-VITE_SUPABASE_URL=http://localhost:54321
+VITE_SUPABASE_URL=http://127.0.0.1:54321
 VITE_SUPABASE_ANON_KEY=your-anon-key   # safe for browser, NOT the service role key
 
-VITE_API_URL=http://localhost:3001
+VITE_API_URL=http://127.0.0.1:3001
 
 # Optional — from: mapbox.com → Tokens
 VITE_MAPBOX_TOKEN=your-mapbox-token
@@ -133,8 +133,8 @@ supabase db reset       # applies all migrations + seed data
 npm run dev
 
 # Or run individually
-npm run dev:frontend    # http://localhost:3000
-npm run dev:backend     # http://localhost:4000
+npm run dev:frontend    # http://127.0.0.1:3000
+npm run dev:backend     # http://127.0.0.1:4000
 ```
 
 ---
