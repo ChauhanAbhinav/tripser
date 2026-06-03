@@ -23,20 +23,6 @@ export const api = {
     return data;
   },
 
-  // Fetch Group Voting Boards with their options joined
-  async getVotingBoards() {
-    const { data, error } = await supabase
-      .from('voting_boards')
-      .select(`*, voting_options (*)`)
-      .order('created_at', { ascending: false });
-
-    if (error) {
-      console.error('Error fetching boards:', error);
-      return null;
-    }
-    return data;
-  },
-
   // Invoke a secure Supabase Edge Function
   async processSecureCheckout(planType: string) {
     const { data, error } = await supabase.functions.invoke('process-payment', {
@@ -102,18 +88,22 @@ export const api = {
     return data;
   },
 
-  // Fetch Destinations (Hidden Gems) from the database
-  async getHiddenGems() {
+  // Fetch Places from the database
+  async getPlaces() {
     const { data, error } = await supabase
-      .from('hidden_gems')
+      .from('places')
       .select('*')
       .order('created_at', { ascending: false });
 
     if (error) {
-      console.error('Error fetching hidden gems:', error);
+      console.error('Error fetching places:', error);
       return [];
     }
     return data;
+  },
+
+  async getHiddenGems() {
+    return this.getPlaces();
   },
 
   // Save AI-Generated Itinerary to Supabase

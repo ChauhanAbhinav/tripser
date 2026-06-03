@@ -28,18 +28,18 @@ type Filters = {
   sensory: boolean;
 };
 
-// Normalize raw DB gem → component shape
-const normalizeGem = (gem: any): Destination => ({
-  id: gem.id,
-  name: gem.name,
-  location: gem.location,
-  description: gem.description || '',
-  image: gem.image_url || gem.image || '',
-  price: gem.price_range || gem.price || 'N/A',
-  safety: Number(gem.safety_score ?? gem.safety ?? 0),
-  accessibility: Number(gem.accessibility_score ?? gem.accessibility ?? 0),
-  sensory: Number(gem.sensory_score ?? gem.sensory ?? 0),
-  tags: gem.tags || [],
+// Normalize raw DB place → component shape
+const normalizePlace = (place: any): Destination => ({
+  id: place.id,
+  name: place.name,
+  location: place.location,
+  description: place.description || '',
+  image: place.image_url || place.image || '',
+  price: place.price_range || place.price || 'N/A',
+  safety: Number(place.safety_score ?? place.safety ?? 0),
+  accessibility: Number(place.accessibility_score ?? place.accessibility ?? 0),
+  sensory: Number(place.sensory_score ?? place.sensory ?? 0),
+  tags: place.tags || [],
 });
 
 const applyFilters = (destinations: Destination[], filters: Filters): Destination[] => {
@@ -91,20 +91,20 @@ export default function Discovery() {
     sensory: false,
   });
 
-  // ─── Load DB gems on mount ───────────────────────────────────────────────
-  const loadDatabaseGems = useCallback(async () => {
+  // ─── Load DB places on mount ───────────────────────────────────────────────
+  const loadDatabasePlaces = useCallback(async () => {
     setLoading(true);
     try {
-      let dbGems: any[] | null = null;
-      try { dbGems = await api.getHiddenGems(); } catch (e) {}
+      let dbPlaces: any[] | null = null;
+      try { dbPlaces = await api.getPlaces(); } catch (e) {}
       
-      if (!dbGems || dbGems.length === 0) {
-        const { data } = await supabase.from('hidden_gems').select('*');
-        if (data) dbGems = data;
+      if (!dbPlaces || dbPlaces.length === 0) {
+        const { data } = await supabase.from('places').select('*');
+        if (data) dbPlaces = data;
       }
 
-      if (Array.isArray(dbGems) && dbGems.length > 0) {
-        const normalized = dbGems.map(normalizeGem);
+      if (Array.isArray(dbPlaces) && dbPlaces.length > 0) {
+        const normalized = dbPlaces.map(normalizePlace);
         setAllDestinations(normalized);
         setDestinations(applyFilters(normalized, filters));
       } else {
@@ -112,7 +112,7 @@ export default function Discovery() {
         setDestinations(applyFilters(FALLBACK_GEMS, filters));
       }
     } catch (err) {
-      console.error('Failed to load hidden gems:', err);
+      console.error('Failed to load places:', err);
     } finally {
       setLoading(false);
     }
@@ -122,7 +122,7 @@ export default function Discovery() {
     if (query) {
       handleAiSearch();
     } else {
-      loadDatabaseGems();
+      loadDatabasePlaces();
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -139,15 +139,15 @@ export default function Discovery() {
     try {
       const [advice, structuredData] = await Promise.all([
         getTravelAdvice(
-          `Suggest a hidden gem for: ${query}. Focus on safety, accessibility, and sensory details.`
+          `Suggest a place for: ${query}. Focus on safety, accessibility, and sensory details.`
         ),
-        getStructuredDestinations(query || 'hidden gems for solo travelers'),
+        getStructuredDestinations(query || 'places for solo travelers'),
       ]);
 
       setAiAdvice(advice || 'Here are some curated suggestions based on your search.');
 
       if (Array.isArray(structuredData) && structuredData.length > 0) {
-        const normalized = structuredData.map(normalizeGem);
+        const normalized = structuredData.map(normalizePlace);
         setAllDestinations(normalized);
         setDestinations(applyFilters(normalized, filters));
       } else {
@@ -183,7 +183,7 @@ export default function Discovery() {
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 sm:gap-6 mb-8 sm:mb-12">
           <div>
             <h1 className="text-3xl sm:text-4xl font-display font-bold text-accent">Discovery</h1>
-            <p className="text-muted mt-2 text-sm sm:text-base">Find your next "Hidden Gem" with AI precision.</p>
+            <p className="text-muted mt-2 text-sm sm:text-base">Find your next place with AI precision.</p>
           </div>
 
           <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 w-full md:w-auto">

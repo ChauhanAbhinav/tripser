@@ -5,13 +5,13 @@ import {
   AlertTriangle,
   ChevronLeft,
   ChevronRight,
+  Compass,
   HelpCircle,
   Lightbulb,
   Loader2,
   MapPin,
   MessageSquare,
   Shield,
-  Sparkles,
   Star,
   Volume2,
 } from 'lucide-react';
@@ -36,13 +36,25 @@ interface PlaceInsight {
   title?: string | null;
   body: string;
   rating?: number | null;
-  created_at: string;
   profiles?: {
     full_name?: string | null;
   } | null;
 }
 
-const normalizeGem = (gem: any): Destination => ({
+interface PlaceContentItem {
+  id: string;
+  name: string;
+  description?: string | null;
+  image_url?: string | null;
+}
+
+interface PlaceFaq {
+  id: string;
+  question: string;
+  answer: string;
+}
+
+const normalizePlace = (gem: any): Destination => ({
   id: gem.id,
   name: gem.name,
   location: gem.location,
@@ -75,11 +87,59 @@ function renderStars(rating: number) {
   );
 }
 
+function imageFor(seed: string, index: number) {
+  const images = [
+    'https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?w=900&auto=format&fit=crop',
+    'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=900&auto=format&fit=crop',
+    'https://images.unsplash.com/photo-1517760444937-f6397edcbbcd?w=900&auto=format&fit=crop',
+    'https://images.unsplash.com/photo-1493246507139-91e8fad9978e?w=900&auto=format&fit=crop',
+    'https://images.unsplash.com/photo-1519817650390-64a93db51149?w=900&auto=format&fit=crop',
+  ];
+  return images[(seed.length + index) % images.length];
+}
+
+function SectionHeader({ title, subtitle }: { title: string; subtitle: string }) {
+  return (
+    <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+      <div>
+        <h2 className="text-2xl font-bold text-accent">{title}</h2>
+        <p className="mt-1 text-sm text-muted">{subtitle}</p>
+      </div>
+      <button className="w-fit rounded-xl border border-gray-200 px-4 py-2 text-sm font-bold text-accent transition-colors hover:border-primary hover:text-primary">
+        View more
+      </button>
+    </div>
+  );
+}
+
+function ImageCard({ title, subtitle, image }: { title: string; subtitle: string; image: string }) {
+  return (
+    <article className="group overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm transition-shadow hover:shadow-lg">
+      <div className="h-44 overflow-hidden bg-gray-100">
+        <img
+          src={image}
+          alt={title}
+          className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
+          referrerPolicy="no-referrer"
+        />
+      </div>
+      <div className="p-4">
+        <h3 className="font-bold text-accent">{title}</h3>
+        <p className="mt-1 text-sm text-muted">{subtitle}</p>
+      </div>
+    </article>
+  );
+}
+
 export default function PlaceDetails() {
   const { id } = useParams();
   const navigate = useNavigate();
   const [place, setPlace] = useState<Destination | null>(null);
   const [nearbyPlaces, setNearbyPlaces] = useState<Destination[]>([]);
+  const [hiddenGems, setHiddenGems] = useState<PlaceContentItem[]>([]);
+  const [thingsToDo, setThingsToDo] = useState<PlaceContentItem[]>([]);
+  const [attractions, setAttractions] = useState<PlaceContentItem[]>([]);
+  const [faqs, setFaqs] = useState<PlaceFaq[]>([]);
   const [insights, setInsights] = useState<PlaceInsight[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -87,18 +147,34 @@ export default function PlaceDetails() {
     if (!id) return;
 
     setIsLoading(true);
-    const [{ data: gem }, { data: otherGems }, { data: placeInsights }] = await Promise.all([
-      supabase.from('hidden_gems').select('*').eq('id', Number(id)).single(),
-      supabase.from('hidden_gems').select('*').neq('id', Number(id)).limit(3),
+    const [
+      { data: placeData },
+      { data: otherPlaces },
+      { data: placeHiddenGems },
+      { data: placeThingsToDo },
+      { data: placeAttractions },
+      { data: placeFaqs },
+      { data: placeInsights }
+    ] = await Promise.all([
+      supabase.from('places').select('*').eq('id', Number(id)).single(),
+      supabase.from('places').select('*').neq('id', Number(id)).limit(3),
+      supabase.from('place_hidden_gems').select('*').eq('place_id', Number(id)).limit(6),
+      supabase.from('place_things_to_do').select('*').eq('place_id', Number(id)).limit(6),
+      supabase.from('place_attractions').select('*').eq('place_id', Number(id)).limit(6),
+      supabase.from('place_faqs').select('*').eq('place_id', Number(id)).order('sort_order', { ascending: true }),
       supabase
         .from('place_insights')
         .select('*, profiles(full_name)')
-        .eq('hidden_gem_id', Number(id))
+        .eq('place_id', Number(id))
         .order('created_at', { ascending: false }),
     ]);
 
-    if (gem) setPlace(normalizeGem(gem));
-    setNearbyPlaces((otherGems || []).map(normalizeGem));
+    if (placeData) setPlace(normalizePlace(placeData));
+    setNearbyPlaces((otherPlaces || []).map(normalizePlace));
+    setHiddenGems(placeHiddenGems || []);
+    setThingsToDo(placeThingsToDo || []);
+    setAttractions(placeAttractions || []);
+    setFaqs(placeFaqs || []);
     setInsights((placeInsights || []) as PlaceInsight[]);
     setIsLoading(false);
   }, [id]);
@@ -138,32 +214,46 @@ export default function PlaceDetails() {
     ? reviews.reduce((sum, insight) => sum + Number(insight.rating || 0), 0) / reviews.length
     : 0;
 
-  const thingsToDo = [
-    `Take a slow walk through ${place.name}`,
-    `Find a local cafe or viewpoint in ${place.location}`,
-    `Save time for photos, food, and a quiet reset`,
+  const fallbackHiddenGems = [
+    { id: 'fallback-hidden-1', name: `Quiet corner near ${place.name}`, description: 'A calmer stop away from the main flow', image_url: imageFor(place.name, 0) },
+    { id: 'fallback-hidden-2', name: `${place.location} local favorite`, description: 'A low-key place worth asking locals about', image_url: imageFor(place.location, 1) },
+    { id: 'fallback-hidden-3', name: 'Small viewpoint nearby', description: 'Good for a short detour and better photos', image_url: imageFor(place.name + place.location, 2) },
   ];
 
-  const attractions = [
-    `${place.name} main viewpoint`,
-    `${place.location} local market`,
-    `${place.location} old streets and cultural stops`,
+  const fallbackThingsToDo = [
+    { id: 'fallback-thing-1', name: `Slow walk through ${place.name}`, description: 'Best for first impressions and quiet discovery', image_url: imageFor(place.name, 3) },
+    { id: 'fallback-thing-2', name: `Local cafe in ${place.location}`, description: 'Pause, people-watch, and map the rest of your day', image_url: imageFor(place.location, 4) },
+    { id: 'fallback-thing-3', name: 'Golden-hour photo stop', description: 'Save time for soft light, views, and a reset', image_url: imageFor(place.name, 5) },
   ];
 
-  const faqs = [
+  const fallbackAttractions = [
+    { id: 'fallback-attraction-1', name: `${place.name} main viewpoint`, description: 'The easiest anchor for a short visit', image_url: imageFor(place.name, 6) },
+    { id: 'fallback-attraction-2', name: `${place.location} local market`, description: 'Food, small shops, and local texture', image_url: imageFor(place.location, 7) },
+    { id: 'fallback-attraction-3', name: 'Old streets and cultural stops', description: 'A simple route for history and atmosphere', image_url: imageFor(place.name, 8) },
+  ];
+
+  const fallbackFaqs = [
     {
+      id: 'fallback-faq-1',
       question: `Is ${place.name} safe for travelers?`,
       answer: `The current safety score is ${place.safety.toFixed(1)}. Read community safety notes before you go.`,
     },
     {
+      id: 'fallback-faq-2',
       question: 'When should I visit?',
       answer: 'Earlier in the day is usually better for calmer crowds, better light, and easier planning.',
     },
     {
+      id: 'fallback-faq-3',
       question: 'Can I plan a full trip from here?',
       answer: 'Yes. Use Plan a Trip and Tripser will take you into the planner flow.',
     },
   ];
+
+  const visibleHiddenGems = hiddenGems.length > 0 ? hiddenGems : fallbackHiddenGems;
+  const visibleThingsToDo = thingsToDo.length > 0 ? thingsToDo : fallbackThingsToDo;
+  const visibleAttractions = attractions.length > 0 ? attractions : fallbackAttractions;
+  const visibleFaqs = faqs.length > 0 ? faqs : fallbackFaqs;
 
   return (
     <div className="min-h-screen bg-gray-50 pb-12">
@@ -176,7 +266,7 @@ export default function PlaceDetails() {
             referrerPolicy="no-referrer"
           />
         )}
-        <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/25 to-black/30" />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/30 to-black/35" />
 
         <div className="relative mx-auto flex min-h-[520px] max-w-7xl flex-col justify-end px-4 pb-10 sm:px-6 lg:px-8">
           <button
@@ -208,22 +298,51 @@ export default function PlaceDetails() {
               >
                 Plan a Trip <ChevronRight size={18} />
               </button>
-              {reviews.length > 0 && (
-                <div className="flex items-center gap-3 rounded-xl bg-white/15 px-4 py-3 backdrop-blur">
-                  {renderStars(Math.round(averageRating))}
-                  <span className="text-sm font-bold">{averageRating.toFixed(1)}/5 traveler rating</span>
-                </div>
-              )}
+              <div className="flex items-center gap-3 rounded-xl bg-white/15 px-4 py-3 backdrop-blur">
+                {reviews.length > 0 ? renderStars(Math.round(averageRating)) : renderStars(0)}
+                <span className="text-sm font-bold">
+                  {reviews.length > 0 ? `${averageRating.toFixed(1)}/5 traveler rating` : 'No traveler rating yet'}
+                </span>
+              </div>
             </div>
           </div>
         </div>
       </section>
 
       <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
-        <div className="grid gap-6 lg:grid-cols-[0.7fr_1.3fr]">
-          <aside className="space-y-6">
+        <div className="space-y-8">
+          <section>
+            <SectionHeader title="Hidden Gems" subtitle={`Low-key finds inside and around ${place.name}.`} />
+            <div className="grid gap-5 md:grid-cols-3">
+              {visibleHiddenGems.map(gem => (
+                <ImageCard key={gem.id} title={gem.name} subtitle={gem.description || ''} image={gem.image_url || imageFor(gem.name, 0)} />
+              ))}
+            </div>
+          </section>
+
+          <section>
+            <SectionHeader title="Things To Do" subtitle="Simple, high-signal ideas for spending your time well." />
+            <div className="grid gap-5 md:grid-cols-3">
+              {visibleThingsToDo.map(item => (
+                <ImageCard key={item.id} title={item.name} subtitle={item.description || ''} image={item.image_url || imageFor(item.name, 3)} />
+              ))}
+            </div>
+          </section>
+
+          <section>
+            <SectionHeader title="Popular Attractions" subtitle="Recognizable stops that help anchor the itinerary." />
+            <div className="grid gap-5 md:grid-cols-3">
+              {visibleAttractions.map(item => (
+                <ImageCard key={item.id} title={item.name} subtitle={item.description || ''} image={item.image_url || imageFor(item.name, 6)} />
+              ))}
+            </div>
+          </section>
+
+          <div className="grid gap-6 lg:grid-cols-[0.8fr_1.2fr]">
             <section className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
-              <h2 className="mb-4 text-lg font-bold text-accent">Place Snapshot</h2>
+              <h2 className="mb-4 flex items-center gap-2 text-xl font-bold text-accent">
+                <Compass className="text-primary" size={20} /> Snapshot
+              </h2>
               <div className="grid grid-cols-3 gap-3">
                 <div className="rounded-xl bg-green-50 p-3 text-center">
                   <Shield className="mx-auto mb-1 text-green-600" size={18} />
@@ -241,68 +360,48 @@ export default function PlaceDetails() {
                   <p className="font-bold text-purple-700">{place.sensory.toFixed(1)}</p>
                 </div>
               </div>
-            </section>
 
-            <section className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
-              <h2 className="mb-4 flex items-center gap-2 text-lg font-bold text-accent">
-                <Sparkles size={18} className="text-primary" /> Nearby Hidden Gems
-              </h2>
-              <div className="space-y-3">
-                {nearbyPlaces.map(nearby => (
-                  <Link
-                    key={nearby.id}
-                    to={`/discovery/place/${nearby.id}`}
-                    className="block rounded-xl border border-gray-100 p-3 transition-colors hover:border-primary/40"
-                  >
-                    <p className="font-bold text-accent">{nearby.name}</p>
-                    <p className="mt-1 text-xs text-muted">{nearby.location}</p>
-                  </Link>
-                ))}
-              </div>
-            </section>
-          </aside>
-
-          <div className="space-y-6">
-            <section className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm sm:p-6">
-              <h2 className="mb-4 text-2xl font-bold text-accent">Things To Do</h2>
-              <div className="grid gap-3 sm:grid-cols-3">
-                {thingsToDo.map(item => (
-                  <div key={item} className="rounded-xl bg-gray-50 p-4 text-sm font-semibold text-accent">
-                    {item}
+              {nearbyPlaces.length > 0 && (
+                <div className="mt-5 border-t border-gray-100 pt-5">
+                  <h3 className="mb-3 text-sm font-bold uppercase tracking-wider text-muted">Nearby Places</h3>
+                  <div className="space-y-2">
+                    {nearbyPlaces.map(nearby => (
+                      <Link
+                        key={nearby.id}
+                        to={`/discovery/place/${nearby.id}`}
+                        className="flex items-center justify-between rounded-xl bg-gray-50 px-3 py-2 text-sm font-bold text-accent transition-colors hover:text-primary"
+                      >
+                        {nearby.name}
+                        <ChevronRight size={15} />
+                      </Link>
+                    ))}
                   </div>
-                ))}
-              </div>
+                </div>
+              )}
             </section>
 
             <section className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm sm:p-6">
-              <h2 className="mb-4 text-2xl font-bold text-accent">Popular Attractions</h2>
+              <h2 className="mb-4 text-xl font-bold text-accent">Community Insights</h2>
               <div className="space-y-3">
-                {attractions.map(item => (
-                  <div key={item} className="flex items-center gap-3 rounded-xl border border-gray-100 p-4">
-                    <MapPin className="text-primary" size={18} />
-                    <span className="font-semibold text-accent">{item}</span>
-                  </div>
-                ))}
-              </div>
-            </section>
-
-            <section className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm sm:p-6">
-              <h2 className="mb-4 text-2xl font-bold text-accent">Community Insights</h2>
-              <div className="grid gap-5 lg:grid-cols-3">
                 {([
                   { type: 'review' as const, icon: MessageSquare, items: reviews },
                   { type: 'tip' as const, icon: Lightbulb, items: tips },
                   { type: 'safety_note' as const, icon: AlertTriangle, items: safetyNotes },
                 ]).map(section => (
-                  <div key={section.type}>
-                    <h3 className="mb-3 flex items-center gap-2 font-bold text-accent">
-                      <section.icon className="text-primary" size={17} />
-                      {insightLabels[section.type]}
-                    </h3>
-                    <div className="space-y-3">
+                  <details key={section.type} className="rounded-xl border border-gray-100 bg-gray-50 p-4">
+                    <summary className="flex cursor-pointer list-none items-center justify-between gap-3">
+                      <span className="flex items-center gap-2 font-bold text-accent">
+                        <section.icon className="text-primary" size={17} />
+                        {insightLabels[section.type]}
+                      </span>
+                      <span className="rounded-full bg-white px-2 py-1 text-xs font-bold text-muted">
+                        {section.items.length}
+                      </span>
+                    </summary>
+                    <div className="mt-4 space-y-3">
                       {section.items.length > 0 ? section.items.map(insight => (
-                        <article key={insight.id} className="rounded-xl bg-gray-50 p-4">
-                          <div className="mb-2 flex items-start justify-between gap-2">
+                        <article key={insight.id} className="rounded-xl bg-white p-4">
+                          <div className="mb-2 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                             <p className="text-sm font-bold text-accent">
                               {insight.title || insightLabels[insight.type].slice(0, -1)}
                             </p>
@@ -314,30 +413,30 @@ export default function PlaceDetails() {
                           </p>
                         </article>
                       )) : (
-                        <div className="rounded-xl border border-dashed border-gray-200 p-4 text-sm text-muted">
+                        <div className="rounded-xl border border-dashed border-gray-200 bg-white p-4 text-sm text-muted">
                           No {insightLabels[section.type].toLowerCase()} yet.
                         </div>
                       )}
                     </div>
-                  </div>
-                ))}
-              </div>
-            </section>
-
-            <section className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm sm:p-6">
-              <h2 className="mb-4 flex items-center gap-2 text-2xl font-bold text-accent">
-                <HelpCircle className="text-primary" size={22} /> FAQs
-              </h2>
-              <div className="space-y-3">
-                {faqs.map(faq => (
-                  <details key={faq.question} className="rounded-xl border border-gray-100 p-4">
-                    <summary className="cursor-pointer font-bold text-accent">{faq.question}</summary>
-                    <p className="mt-3 text-sm leading-relaxed text-muted">{faq.answer}</p>
                   </details>
                 ))}
               </div>
             </section>
           </div>
+
+          <section className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm sm:p-6">
+            <h2 className="mb-4 flex items-center gap-2 text-2xl font-bold text-accent">
+              <HelpCircle className="text-primary" size={22} /> FAQs
+            </h2>
+            <div className="grid gap-3 md:grid-cols-3">
+              {visibleFaqs.map(faq => (
+                <details key={faq.id} className="rounded-xl border border-gray-100 p-4">
+                  <summary className="cursor-pointer font-bold text-accent">{faq.question}</summary>
+                  <p className="mt-3 text-sm leading-relaxed text-muted">{faq.answer}</p>
+                </details>
+              ))}
+            </div>
+          </section>
         </div>
       </main>
     </div>

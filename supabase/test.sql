@@ -4,10 +4,10 @@
 -- ==========================================
 
 -- ==========================================
--- 1. HIDDEN GEMS
+-- 1. PLACES
 -- ==========================================
 
-INSERT INTO hidden_gems (name, location, description, image_url, price_range, safety_score, accessibility_score, sensory_score, tags) VALUES
+INSERT INTO places (name, location, description, image_url, price_range, safety_score, accessibility_score, sensory_score, tags) VALUES
   (
     'Kotor Old Town',
     'Montenegro',
@@ -63,65 +63,24 @@ INSERT INTO hidden_gems (name, location, description, image_url, price_range, sa
     ARRAY['Hidden Gem', 'Foodie', 'Architecture', 'Budget']
   );
 
--- ==========================================
--- 2. VOTING BOARDS + OPTIONS
--- Explicit IDs so options reference them safely
--- regardless of sequence state after reset.
--- ==========================================
+INSERT INTO place_hidden_gems (place_id, name, description, image_url, tags)
+SELECT id, 'Quiet backstreet viewpoint', 'A calmer photo stop away from the main walking route.', image_url, ARRAY['Quiet', 'Viewpoint']
+FROM places;
 
-INSERT INTO voting_boards (id, title, category, members) VALUES
-  (1, 'Where should we go this winter?',  'Destination',   4),
-  (2, 'Best budget stays in Lisbon',      'Accommodation', 3),
-  (3, 'Group dinner night — Rome',        'Food',          6),
-  (4, 'Girls Trip to Kyoto 🌸',           'Accommodation', 4),
-  (5, 'Family Amalfi Coast 🍋',           'Activity',      6),
-  (6, 'Solo Backpacking Balkans 🗺️',      'Transport',     3)
-ON CONFLICT (id) DO NOTHING;
+INSERT INTO place_things_to_do (place_id, name, description, image_url, category)
+SELECT id, 'Slow local walk', 'A low-pressure route to understand the place before planning the rest of the day.', image_url, 'Walk'
+FROM places;
 
--- Keep sequence in sync after explicit ID inserts
-SELECT setval('voting_boards_id_seq', (SELECT MAX(id) FROM voting_boards));
+INSERT INTO place_attractions (place_id, name, description, image_url, popularity_score)
+SELECT id, name || ' main landmark', 'The most recognizable anchor point for first-time visitors.', image_url, 8.5
+FROM places;
 
--- Board 1 — Destination
-INSERT INTO voting_options (board_id, name, price, votes) VALUES
-  (1, 'Chefchaouen, Morocco', '$750/person', 3),
-  (1, 'Tbilisi, Georgia',     '$620/person', 5),
-  (1, 'Kotor, Montenegro',    '$890/person', 2);
-
--- Board 2 — Accommodation Lisbon
-INSERT INTO voting_options (board_id, name, price, votes) VALUES
-  (2, 'Lisbon Serviced Apartment', '$65/night',  2),
-  (2, 'Boutique Hotel Alfama',     '$110/night', 4),
-  (2, 'Hostel LX Factory',         '$28/night',  1);
-
--- Board 3 — Food Rome
-INSERT INTO voting_options (board_id, name, price, votes) VALUES
-  (3, 'Trattoria da Enzo',         '$45/person', 4),
-  (3, 'Roscioli',                  '$65/person', 6),
-  (3, 'Supplì Roma (Street Food)', '$12/person', 3);
-
--- Board 4 — Kyoto Accommodation
-INSERT INTO voting_options (board_id, name, price, votes) VALUES
-  (4, 'Ryokan in Gion',            '$350/night', 3),
-  (4, 'Modern Hotel Downtown',     '$200/night', 1),
-  (4, 'Airbnb near Bamboo Forest', '$280/night', 0);
-
--- Board 5 — Amalfi Activity
-INSERT INTO voting_options (board_id, name, price, votes) VALUES
-  (5, 'Private Boat Tour',      '$120/pp',   5),
-  (5, 'Pasta Cooking Class',    '$85/pp',    4),
-  (5, 'Ravello Cliffside Hike', '$0 (free)', 2);
-
--- Board 6 — Balkans Transport
-INSERT INTO voting_options (board_id, name, price, votes) VALUES
-  (6, 'FlixBus Pass (7 days)',       '$89/person',  2),
-  (6, 'Rent a Car & Share Costs',    '$45/day',     1),
-  (6, 'Train Inter-Rail Youth Pass', '$120/person', 1);
-
--- Keep voting_options sequence in sync
-SELECT setval('voting_options_id_seq', (SELECT MAX(id) FROM voting_options));
+INSERT INTO place_faqs (place_id, question, answer, sort_order)
+SELECT id, 'When should I visit?', 'Earlier in the day is usually calmer, cooler, and easier for photos.', 1
+FROM places;
 
 -- ==========================================
--- 3. LIVE VIBES
+-- 2. LIVE VIBES
 -- user_id NULL = anonymous seed rows.
 -- Service role key bypasses RLS on insert;
 -- SELECT policy (true) means everyone sees them.

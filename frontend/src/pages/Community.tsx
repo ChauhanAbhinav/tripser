@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { AnimatePresence, motion } from 'motion/react';
 import {
   BookOpen,
@@ -14,6 +15,7 @@ import {
   Star,
   ThumbsUp,
   WifiOff,
+  X,
 } from 'lucide-react';
 import { supabase } from '../lib/supabaseClient';
 import { getValidatedAuthSession } from '../lib/authSession';
@@ -32,13 +34,27 @@ interface LiveVibe {
   hasVoted?: boolean;
 }
 
-interface HiddenGem {
+interface Place {
   id: number;
   name: string;
   location: string;
   safety_score?: number | null;
   sensory_score?: number | null;
   tags?: string[] | null;
+  image_url?: string | null;
+}
+
+interface TravelStory {
+  id: string;
+  title: string;
+  excerpt?: string | null;
+  body: string;
+  image_url?: string | null;
+  mood?: string | null;
+  created_at: string;
+  author: string;
+  place?: string | null;
+  location?: string | null;
 }
 
 const insightTypes = [
@@ -103,9 +119,12 @@ export default function Community() {
   const [user, setUser] = useState<any>(null);
   const [profile, setProfile] = useState<any>(null);
   const [vibes, setVibes] = useState<LiveVibe[]>([]);
-  const [hiddenGems, setHiddenGems] = useState<HiddenGem[]>([]);
+  const [stories, setStories] = useState<TravelStory[]>([]);
+  const [places, setPlaces] = useState<Place[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSharing, setIsSharing] = useState(false);
+  const [isStoryModalOpen, setIsStoryModalOpen] = useState(false);
+  const [isSavingStory, setIsSavingStory] = useState(false);
   const [votingInProgress, setVotingInProgress] = useState<Set<number>>(new Set());
   const [realtimeConnected, setRealtimeConnected] = useState(false);
   const [, forceUpdate] = useState(0);
@@ -116,6 +135,13 @@ export default function Community() {
     reviewSignal: 'Good',
     rating: 5,
     message: '',
+  });
+  const [storyForm, setStoryForm] = useState({
+    gemId: '',
+    title: '',
+    excerpt: '',
+    body: '',
+    mood: 'Memorable',
   });
 
   useEffect(() => {
@@ -152,16 +178,38 @@ export default function Community() {
     if (data) setProfile(data);
   }, []);
 
-  const loadHiddenGems = useCallback(async () => {
+  const loadPlaces = useCallback(async () => {
     const { data } = await supabase
-      .from('hidden_gems')
-      .select('id, name, location, safety_score, sensory_score, tags')
+      .from('places')
+      .select('id, name, location, safety_score, sensory_score, tags, image_url')
       .order('created_at', { ascending: false });
 
-    setHiddenGems(data || []);
+    setPlaces(data || []);
     if (data?.[0]) {
       setInsightForm(prev => prev.gemId ? prev : { ...prev, gemId: String(data[0].id) });
+      setStoryForm(prev => prev.gemId ? prev : { ...prev, gemId: String(data[0].id) });
     }
+  }, []);
+
+  const loadStories = useCallback(async () => {
+    const { data } = await supabase
+      .from('travel_stories')
+      .select('*, profiles(full_name), places(name, location, image_url)')
+      .order('created_at', { ascending: false })
+      .limit(6);
+
+    setStories((data || []).map((story: any) => ({
+      id: story.id,
+      title: story.title,
+      excerpt: story.excerpt,
+      body: story.body,
+      image_url: story.image_url || story.places?.image_url,
+      mood: story.mood,
+      created_at: story.created_at,
+      author: story.profiles?.full_name || 'Anonymous Traveler',
+      place: story.places?.name,
+      location: story.places?.location,
+    })));
   }, []);
 
   const loadVibes = useCallback(async (currentUser?: any) => {
@@ -199,14 +247,14 @@ export default function Community() {
     async function init() {
       setIsLoading(true);
       try {
-        await Promise.all([loadVibes(), loadHiddenGems()]);
+        await Promise.all([loadVibes(), loadPlaces(), loadStories()]);
       } finally {
         setIsLoading(false);
       }
     }
 
     init();
-  }, [loadHiddenGems, loadVibes]);
+  }, [loadPlaces, loadStories, loadVibes]);
 
   useEffect(() => {
     if (!user) return;
@@ -266,6 +314,23 @@ export default function Community() {
     };
   }, []);
 
+  useEffect(() => {
+    const storiesChannel = supabase
+      .channel('community:travel_stories')
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'travel_stories' },
+        () => {
+          loadStories();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(storiesChannel);
+    };
+  }, [loadStories]);
+
   const handleShareInsight = async (event: React.FormEvent) => {
     event.preventDefault();
 
@@ -274,9 +339,9 @@ export default function Community() {
       return;
     }
 
-    const selectedGem = hiddenGems.find(gem => String(gem.id) === insightForm.gemId);
+    const selectedPlace = places.find(place => String(place.id) === insightForm.gemId);
     const message = insightForm.message.trim();
-    if (!selectedGem || !message) {
+    if (!selectedPlace || !message) {
       toast('Choose a place and add a helpful note.', 'info');
       return;
     }
@@ -287,11 +352,11 @@ export default function Community() {
       const selectedVibe = vibeOptions.find(vibe => vibe.value === insightForm.vibe) || vibeOptions[0];
       const { error } = await supabase.from('live_vibes').insert({
         user_id: user.id,
-        location: `${selectedGem.name}, ${selectedGem.location}`,
-        safety_score: selectedGem.safety_score || selectedVibe.score,
+        location: `${selectedPlace.name}, ${selectedPlace.location}`,
+        safety_score: selectedPlace.safety_score || selectedVibe.score,
         sensory_status: selectedVibe.label,
         message,
-        tags: ['vibe-check', ...(selectedGem.tags || []).slice(0, 2)],
+        tags: ['vibe-check', ...(selectedPlace.tags || []).slice(0, 2)],
       });
 
       setIsSharing(false);
@@ -308,10 +373,10 @@ export default function Community() {
 
     const insightType = insightTypes.find(type => type.value === insightForm.type);
     const { error: insightError } = await supabase.from('place_insights').insert({
-      hidden_gem_id: selectedGem.id,
+      place_id: selectedPlace.id,
       user_id: user.id,
       type: insightForm.type,
-      title: `${insightType?.label || 'Insight'} for ${selectedGem.name}`,
+      title: `${insightType?.label || 'Insight'} for ${selectedPlace.name}`,
       body: insightForm.type === 'review' ? `${insightForm.reviewSignal}: ${message}` : message,
       rating: insightForm.type === 'review' ? insightForm.rating : null,
     });
@@ -358,7 +423,46 @@ export default function Community() {
     });
   };
 
-  const storyVibes = vibes.filter(vibe => vibe.message.length > 0).slice(0, 4);
+  const handleSaveStory = async (event: React.FormEvent) => {
+    event.preventDefault();
+
+    if (!user) {
+      toast('Please sign in to share a travel story.', 'info');
+      return;
+    }
+
+    const title = storyForm.title.trim();
+    const body = storyForm.body.trim();
+    if (!title || !body) {
+      toast('Add a title and story before sharing.', 'info');
+      return;
+    }
+
+    const selectedPlace = places.find(place => String(place.id) === storyForm.gemId);
+    setIsSavingStory(true);
+
+    const { error } = await supabase.from('travel_stories').insert({
+      user_id: user.id,
+      place_id: selectedPlace ? selectedPlace.id : null,
+      title,
+      excerpt: storyForm.excerpt.trim() || body.slice(0, 140),
+      body,
+      mood: storyForm.mood,
+      image_url: selectedPlace?.image_url || null,
+    });
+
+    setIsSavingStory(false);
+
+    if (error) {
+      toast(`Could not share story: ${error.message}`, 'error');
+      return;
+    }
+
+    setStoryForm(prev => ({ ...prev, title: '', excerpt: '', body: '', mood: 'Memorable' }));
+    setIsStoryModalOpen(false);
+    loadStories();
+    toast('Travel story shared.', 'success');
+  };
 
   return (
     <div className="min-h-screen bg-gray-50 pt-24 pb-12">
@@ -486,22 +590,56 @@ export default function Community() {
 
               <div className="space-y-6 sm:space-y-8">
                 <section className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm sm:p-6">
-                  <h2 className="flex items-center gap-2 text-2xl font-bold text-accent">
-                    <BookOpen className="text-primary" /> Travel Stories
-                  </h2>
-                  <p className="mt-1 text-sm text-muted">Moments from fellow travelers</p>
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <h2 className="flex items-center gap-2 text-2xl font-bold text-accent">
+                        <BookOpen className="text-primary" /> Travel Stories
+                      </h2>
+                      <p className="mt-1 text-sm text-muted">Moments from fellow travelers</p>
+                    </div>
+                    <button
+                      onClick={() => setIsStoryModalOpen(true)}
+                      className="rounded-xl border border-gray-200 p-2 text-accent transition-colors hover:border-primary hover:text-primary"
+                      aria-label="Add travel story"
+                    >
+                      <Plus size={18} />
+                    </button>
+                  </div>
 
                   <div className="mt-5 space-y-3">
-                    {storyVibes.length > 0 ? storyVibes.map(story => (
-                      <article key={story.id} className="rounded-xl border border-gray-100 bg-gray-50 p-4">
-                        <p className="text-sm font-bold text-accent">{story.location}</p>
-                        <p className="mt-2 text-sm leading-relaxed text-muted">{story.message}</p>
-                        <p className="mt-3 text-xs font-semibold text-primary">{story.user} • {story.time}</p>
-                      </article>
+                    {stories.length > 0 ? stories.map(story => (
+                      <Link
+                        key={story.id}
+                        to={`/community/stories/${story.id}`}
+                        className="block overflow-hidden rounded-xl border border-gray-100 bg-gray-50 transition-all hover:border-primary/40 hover:bg-white hover:shadow-sm"
+                      >
+                        {story.image_url && (
+                          <img
+                            src={story.image_url}
+                            alt={story.title}
+                            className="h-28 w-full object-cover"
+                            referrerPolicy="no-referrer"
+                          />
+                        )}
+                        <div className="p-4">
+                          <div className="mb-2 flex items-start justify-between gap-3">
+                            <p className="text-sm font-bold text-accent">{story.title}</p>
+                            {story.mood && (
+                              <span className="rounded-md bg-primary/10 px-2 py-1 text-[10px] font-bold text-primary">
+                                {story.mood}
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-sm leading-relaxed text-muted line-clamp-2">{story.excerpt || story.body}</p>
+                          <p className="mt-3 text-xs font-semibold text-primary">
+                            {story.author}{story.place ? ` • ${story.place}` : ''}
+                          </p>
+                        </div>
+                      </Link>
                     )) : (
                       <div className="rounded-xl border border-dashed border-gray-200 p-8 text-center text-muted">
                         <BookOpen size={30} className="mx-auto mb-3 opacity-25" />
-                        <p className="font-medium">Stories will appear as travelers share insights.</p>
+                        <p className="font-medium">Be the first to share a travel story.</p>
                       </div>
                     )}
                   </div>
@@ -523,16 +661,16 @@ export default function Community() {
                   <form onSubmit={handleShareInsight} className="space-y-4">
                     <label className="block">
                       <span className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-muted">
-                        Hidden gem
+                        Place
                       </span>
                       <select
                         value={insightForm.gemId}
                         onChange={event => setInsightForm(prev => ({ ...prev, gemId: event.target.value }))}
                         className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-3 text-sm font-semibold text-accent outline-none transition-colors focus:border-primary focus:bg-white"
                       >
-                        {hiddenGems.map(gem => (
-                          <option key={gem.id} value={gem.id}>
-                            {gem.name} - {gem.location}
+                        {places.map(place => (
+                          <option key={place.id} value={place.id}>
+                            {place.name} - {place.location}
                           </option>
                         ))}
                       </select>
@@ -629,17 +767,17 @@ export default function Community() {
 
                     <button
                       type="submit"
-                      disabled={isSharing || hiddenGems.length === 0}
+                      disabled={isSharing || places.length === 0}
                       className="btn-primary flex w-full items-center justify-center gap-2 rounded-xl py-3 font-bold disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       {isSharing ? <Loader2 size={18} className="animate-spin" /> : <Send size={18} />}
                       {insightForm.type === 'vibe_check' ? 'Share Vibe Checkin' : 'Save to Discovery'}
                     </button>
 
-                    {hiddenGems.length === 0 && (
+                    {places.length === 0 && (
                       <p className="flex items-center gap-2 text-sm text-muted">
                         <CheckCircle2 size={16} className="text-primary" />
-                        Add hidden gems in Discovery to unlock place-specific insights.
+                        Add places in Discovery to unlock place-specific insights.
                       </p>
                     )}
                   </form>
@@ -649,6 +787,123 @@ export default function Community() {
           </div>
         )}
       </div>
+
+      <AnimatePresence>
+        {isStoryModalOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-end bg-black/40 px-4 py-4 sm:items-center sm:justify-center"
+            onClick={() => setIsStoryModalOpen(false)}
+          >
+            <motion.div
+              initial={{ opacity: 0, y: 24, scale: 0.98 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 24, scale: 0.98 }}
+              className="w-full max-w-xl rounded-2xl bg-white p-5 shadow-2xl sm:p-6"
+              onClick={event => event.stopPropagation()}
+            >
+              <div className="mb-5 flex items-start justify-between gap-4">
+                <div>
+                  <h2 className="text-2xl font-bold text-accent">Add Travel Story</h2>
+                  <p className="mt-1 text-sm text-muted">Share a memorable moment from a place.</p>
+                </div>
+                <button
+                  onClick={() => setIsStoryModalOpen(false)}
+                  className="rounded-full bg-gray-100 p-2 text-accent transition-colors hover:bg-gray-200"
+                  aria-label="Close story form"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              <form onSubmit={handleSaveStory} className="space-y-4">
+                <label className="block">
+                  <span className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-muted">
+                    Place
+                  </span>
+                  <select
+                    value={storyForm.gemId}
+                    onChange={event => setStoryForm(prev => ({ ...prev, gemId: event.target.value }))}
+                    className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-3 text-sm font-semibold text-accent outline-none transition-colors focus:border-primary focus:bg-white"
+                  >
+                    {places.map(place => (
+                      <option key={place.id} value={place.id}>
+                        {place.name} - {place.location}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <div className="grid gap-3 sm:grid-cols-[1fr_0.6fr]">
+                  <label className="block">
+                    <span className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-muted">
+                      Title
+                    </span>
+                    <input
+                      value={storyForm.title}
+                      onChange={event => setStoryForm(prev => ({ ...prev, title: event.target.value }))}
+                      className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-3 text-sm font-semibold text-accent outline-none transition-colors focus:border-primary focus:bg-white"
+                      placeholder="A morning I still remember"
+                    />
+                  </label>
+
+                  <label className="block">
+                    <span className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-muted">
+                      Mood
+                    </span>
+                    <select
+                      value={storyForm.mood}
+                      onChange={event => setStoryForm(prev => ({ ...prev, mood: event.target.value }))}
+                      className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-3 text-sm font-semibold text-accent outline-none transition-colors focus:border-primary focus:bg-white"
+                    >
+                      {['Memorable', 'Peaceful', 'Surprising', 'Helpful', 'Emotional'].map(mood => (
+                        <option key={mood} value={mood}>{mood}</option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+
+                <label className="block">
+                  <span className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-muted">
+                    Short preview
+                  </span>
+                  <input
+                    value={storyForm.excerpt}
+                    onChange={event => setStoryForm(prev => ({ ...prev, excerpt: event.target.value }))}
+                    maxLength={160}
+                    className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-3 text-sm text-accent outline-none transition-colors focus:border-primary focus:bg-white"
+                    placeholder="One sentence that captures the moment"
+                  />
+                </label>
+
+                <label className="block">
+                  <span className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-muted">
+                    Story
+                  </span>
+                  <textarea
+                    value={storyForm.body}
+                    onChange={event => setStoryForm(prev => ({ ...prev, body: event.target.value }))}
+                    rows={6}
+                    className="w-full resize-none rounded-xl border border-gray-200 bg-gray-50 px-3 py-3 text-sm leading-relaxed text-accent outline-none transition-colors focus:border-primary focus:bg-white"
+                    placeholder="What happened, what did it feel like, and what should others know?"
+                  />
+                </label>
+
+                <button
+                  type="submit"
+                  disabled={isSavingStory}
+                  className="btn-primary flex w-full items-center justify-center gap-2 rounded-xl py-3 font-bold disabled:opacity-60"
+                >
+                  {isSavingStory ? <Loader2 size={18} className="animate-spin" /> : <Send size={18} />}
+                  Share Story
+                </button>
+              </form>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

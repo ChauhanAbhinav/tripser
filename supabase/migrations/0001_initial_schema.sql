@@ -30,33 +30,6 @@ CREATE TABLE IF NOT EXISTS live_vibes (
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- Voting Boards (Collaborative Planning)
-CREATE TABLE IF NOT EXISTS voting_boards (
-  id SERIAL PRIMARY KEY,
-  title TEXT NOT NULL,
-  category TEXT NOT NULL,
-  members INTEGER DEFAULT 1,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
-
--- Voting Options
-CREATE TABLE IF NOT EXISTS voting_options (
-  id SERIAL PRIMARY KEY,
-  board_id INTEGER REFERENCES voting_boards(id) ON DELETE CASCADE,
-  name TEXT NOT NULL,
-  price TEXT NOT NULL,
-  votes INTEGER DEFAULT 0
-);
-
--- User Votes (Track who voted for what)
-CREATE TABLE IF NOT EXISTS user_votes (
-  id SERIAL PRIMARY KEY,
-  user_id UUID REFERENCES profiles(id) ON DELETE CASCADE,
-  option_id INTEGER REFERENCES voting_options(id) ON DELETE CASCADE,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  UNIQUE(user_id, option_id)
-);
-
 -- Itineraries
 CREATE TABLE IF NOT EXISTS itineraries (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -93,11 +66,12 @@ CREATE TABLE IF NOT EXISTS travel_documents (
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- Hidden Gems (For Vector / AI Search)
-CREATE TABLE IF NOT EXISTS hidden_gems (
+-- Places (Primary Discovery Entities)
+CREATE TABLE IF NOT EXISTS places (
   id SERIAL PRIMARY KEY,
   name TEXT NOT NULL,
   location TEXT NOT NULL,
+  country TEXT,
   description TEXT,
   image_url TEXT,
   price_range TEXT,
@@ -179,11 +153,10 @@ ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE itineraries ENABLE ROW LEVEL SECURITY;
 ALTER TABLE itinerary_events ENABLE ROW LEVEL SECURITY;
 ALTER TABLE travel_documents ENABLE ROW LEVEL SECURITY;
-ALTER TABLE hidden_gems ENABLE ROW LEVEL SECURITY;
+ALTER TABLE places ENABLE ROW LEVEL SECURITY;
 ALTER TABLE packing_lists ENABLE ROW LEVEL SECURITY;
 ALTER TABLE trip_budgets ENABLE ROW LEVEL SECURITY;
 ALTER TABLE expenses ENABLE ROW LEVEL SECURITY;
-ALTER TABLE user_votes ENABLE ROW LEVEL SECURITY;
 
 -- Profiles: Anyone can view profiles, but only the owner can edit theirs
 CREATE POLICY "Profiles are viewable by everyone" ON profiles FOR SELECT USING (true);
@@ -199,8 +172,8 @@ CREATE POLICY "Users manage own events" ON itinerary_events FOR ALL USING (
 -- Travel Documents: Only the owner can view and manage
 CREATE POLICY "Users manage own documents" ON travel_documents FOR ALL USING (auth.uid() = user_id);
 
--- Hidden Gems: Anyone can view them
-CREATE POLICY "Hidden gems are viewable by everyone" ON hidden_gems FOR SELECT USING (true);
+-- Places: Anyone can view them
+CREATE POLICY "Places are viewable by everyone" ON places FOR SELECT USING (true);
 
 -- Packing Lists: Only the owner can view and manage
 CREATE POLICY "Users manage own packing lists" ON packing_lists FOR ALL USING (auth.uid() = user_id);
@@ -209,18 +182,12 @@ CREATE POLICY "Users manage own packing lists" ON packing_lists FOR ALL USING (a
 CREATE POLICY "Users manage own budgets" ON trip_budgets FOR ALL USING (auth.uid() = user_id);
 CREATE POLICY "Users manage own expenses" ON expenses FOR ALL USING (auth.uid() = user_id);
 
--- User Votes: Users can see all votes but only manage their own
-CREATE POLICY "Votes viewable by everyone" ON user_votes FOR SELECT USING (true);
-CREATE POLICY "Users manage own votes" ON user_votes FOR ALL USING (auth.uid() = user_id);
-
 -- ==========================================
 -- 4. COMMUNITY HUB SETUP 
 -- ==========================================
 
 -- Add tables to the realtime publication
 ALTER PUBLICATION supabase_realtime ADD TABLE live_vibes;
-ALTER PUBLICATION supabase_realtime ADD TABLE voting_options;
-ALTER PUBLICATION supabase_realtime ADD TABLE voting_boards;
 ALTER PUBLICATION supabase_realtime ADD TABLE expenses;
 
 -- ==========================================

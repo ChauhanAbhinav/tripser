@@ -4,10 +4,10 @@
 -- ==========================================
 
 -- ==========================================
--- 1. HIDDEN GEMS
+-- 1. PLACES
 -- ==========================================
 
-INSERT INTO hidden_gems (name, location, description, image_url, price_range, safety_score, accessibility_score, sensory_score, tags) VALUES
+INSERT INTO places (name, location, description, image_url, price_range, safety_score, accessibility_score, sensory_score, tags) VALUES
   (
     'Kotor Old Town',
     'Montenegro',
@@ -63,35 +63,24 @@ INSERT INTO hidden_gems (name, location, description, image_url, price_range, sa
     ARRAY['Hidden Gem', 'Foodie', 'Architecture', 'Budget']
   );
 
--- ==========================================
--- 2. VOTING BOARDS + OPTIONS
--- ==========================================
+INSERT INTO place_hidden_gems (place_id, name, description, image_url, tags)
+SELECT id, 'Quiet backstreet viewpoint', 'A calmer photo stop away from the main walking route.', image_url, ARRAY['Quiet', 'Viewpoint']
+FROM places;
 
-INSERT INTO voting_boards (title, category, members) VALUES
-  ('Where should we go this winter?', 'Destination', 4),
-  ('Best budget stays in Lisbon', 'Accommodation', 3),
-  ('Group dinner night — Rome', 'Food', 6);
+INSERT INTO place_things_to_do (place_id, name, description, image_url, category)
+SELECT id, 'Slow local walk', 'A low-pressure route to understand the place before planning the rest of the day.', image_url, 'Walk'
+FROM places;
 
--- Board 1 options
-INSERT INTO voting_options (board_id, name, price, votes) VALUES
-  (1, 'Chefchaouen, Morocco', '$750/person', 3),
-  (1, 'Tbilisi, Georgia', '$620/person', 5),
-  (1, 'Kotor, Montenegro', '$890/person', 2);
+INSERT INTO place_attractions (place_id, name, description, image_url, popularity_score)
+SELECT id, name || ' main landmark', 'The most recognizable anchor point for first-time visitors.', image_url, 8.5
+FROM places;
 
--- Board 2 options
-INSERT INTO voting_options (board_id, name, price, votes) VALUES
-  (2, 'Lisbon Serviced Apartment', '$65/night', 2),
-  (2, 'Boutique Hotel Alfama', '$110/night', 4),
-  (2, 'Hostel LX Factory', '$28/night', 1);
-
--- Board 3 options
-INSERT INTO voting_options (board_id, name, price, votes) VALUES
-  (3, 'Trattoria da Enzo', '$45/person', 4),
-  (3, 'Roscioli', '$65/person', 6),
-  (3, 'Supplì Roma (Street Food)', '$12/person', 3);
+INSERT INTO place_faqs (place_id, question, answer, sort_order)
+SELECT id, 'When should I visit?', 'Earlier in the day is usually calmer, cooler, and easier for photos.', 1
+FROM places;
 
 -- ==========================================
--- 3. LIVE VIBES (no user_id — public check-ins)
+-- 2. LIVE VIBES (no user_id — public check-ins)
 -- ==========================================
 -- Note: user_id is nullable in RLS so anonymous vibes work for seeding
 

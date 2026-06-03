@@ -8,6 +8,7 @@ import Navbar from './components/Navbar';
 import Home from './pages/Home';
 import Discovery from './pages/Discovery';
 import PlaceDetails from './pages/PlaceDetails';
+import TravelStoryDetails from './pages/TravelStoryDetails';
 import Planner from './pages/Planner';
 import Wallet from './pages/Wallet';
 import Dashboard from './pages/Dashboard';
@@ -29,6 +30,7 @@ export default function App() {
               <Route path="/" element={<Home />} />
               <Route path="/discovery" element={<Discovery />} />
               <Route path="/discovery/place/:id" element={<PlaceDetails />} />
+              <Route path="/community/stories/:id" element={<TravelStoryDetails />} />
               <Route path="/planner" element={<Planner />} />
               <Route 
                 path="/wallet" 
