@@ -41,19 +41,6 @@ interface PlaceInsight {
   } | null;
 }
 
-interface PlaceContentItem {
-  id: string;
-  name: string;
-  description?: string | null;
-  image_url?: string | null;
-}
-
-interface PlaceFaq {
-  id: string;
-  question: string;
-  answer: string;
-}
-
 const normalizePlace = (gem: any): Destination => ({
   id: gem.id,
   name: gem.name,
@@ -136,10 +123,6 @@ export default function PlaceDetails() {
   const navigate = useNavigate();
   const [place, setPlace] = useState<Destination | null>(null);
   const [nearbyPlaces, setNearbyPlaces] = useState<Destination[]>([]);
-  const [hiddenGems, setHiddenGems] = useState<PlaceContentItem[]>([]);
-  const [thingsToDo, setThingsToDo] = useState<PlaceContentItem[]>([]);
-  const [attractions, setAttractions] = useState<PlaceContentItem[]>([]);
-  const [faqs, setFaqs] = useState<PlaceFaq[]>([]);
   const [insights, setInsights] = useState<PlaceInsight[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -147,21 +130,9 @@ export default function PlaceDetails() {
     if (!id) return;
 
     setIsLoading(true);
-    const [
-      { data: placeData },
-      { data: otherPlaces },
-      { data: placeHiddenGems },
-      { data: placeThingsToDo },
-      { data: placeAttractions },
-      { data: placeFaqs },
-      { data: placeInsights }
-    ] = await Promise.all([
+    const [{ data: gem }, { data: otherGems }, { data: placeInsights }] = await Promise.all([
       supabase.from('places').select('*').eq('id', Number(id)).single(),
       supabase.from('places').select('*').neq('id', Number(id)).limit(3),
-      supabase.from('place_hidden_gems').select('*').eq('place_id', Number(id)).limit(6),
-      supabase.from('place_things_to_do').select('*').eq('place_id', Number(id)).limit(6),
-      supabase.from('place_attractions').select('*').eq('place_id', Number(id)).limit(6),
-      supabase.from('place_faqs').select('*').eq('place_id', Number(id)).order('sort_order', { ascending: true }),
       supabase
         .from('place_insights')
         .select('*, profiles(full_name)')
@@ -169,12 +140,8 @@ export default function PlaceDetails() {
         .order('created_at', { ascending: false }),
     ]);
 
-    if (placeData) setPlace(normalizePlace(placeData));
-    setNearbyPlaces((otherPlaces || []).map(normalizePlace));
-    setHiddenGems(placeHiddenGems || []);
-    setThingsToDo(placeThingsToDo || []);
-    setAttractions(placeAttractions || []);
-    setFaqs(placeFaqs || []);
+    if (gem) setPlace(normalizePlace(gem));
+    setNearbyPlaces((otherGems || []).map(normalizePlace));
     setInsights((placeInsights || []) as PlaceInsight[]);
     setIsLoading(false);
   }, [id]);
@@ -214,46 +181,38 @@ export default function PlaceDetails() {
     ? reviews.reduce((sum, insight) => sum + Number(insight.rating || 0), 0) / reviews.length
     : 0;
 
-  const fallbackHiddenGems = [
-    { id: 'fallback-hidden-1', name: `Quiet corner near ${place.name}`, description: 'A calmer stop away from the main flow', image_url: imageFor(place.name, 0) },
-    { id: 'fallback-hidden-2', name: `${place.location} local favorite`, description: 'A low-key place worth asking locals about', image_url: imageFor(place.location, 1) },
-    { id: 'fallback-hidden-3', name: 'Small viewpoint nearby', description: 'Good for a short detour and better photos', image_url: imageFor(place.name + place.location, 2) },
+  const hiddenGems = [
+    { title: `Quiet corner near ${place.name}`, subtitle: 'A calmer stop away from the main flow', image: imageFor(place.name, 0) },
+    { title: `${place.location} local favorite`, subtitle: 'A low-key place worth asking locals about', image: imageFor(place.location, 1) },
+    { title: 'Small viewpoint nearby', subtitle: 'Good for a short detour and better photos', image: imageFor(place.name + place.location, 2) },
   ];
 
-  const fallbackThingsToDo = [
-    { id: 'fallback-thing-1', name: `Slow walk through ${place.name}`, description: 'Best for first impressions and quiet discovery', image_url: imageFor(place.name, 3) },
-    { id: 'fallback-thing-2', name: `Local cafe in ${place.location}`, description: 'Pause, people-watch, and map the rest of your day', image_url: imageFor(place.location, 4) },
-    { id: 'fallback-thing-3', name: 'Golden-hour photo stop', description: 'Save time for soft light, views, and a reset', image_url: imageFor(place.name, 5) },
+  const thingsToDo = [
+    { title: `Slow walk through ${place.name}`, subtitle: 'Best for first impressions and quiet discovery', image: imageFor(place.name, 3) },
+    { title: `Local cafe in ${place.location}`, subtitle: 'Pause, people-watch, and map the rest of your day', image: imageFor(place.location, 4) },
+    { title: 'Golden-hour photo stop', subtitle: 'Save time for soft light, views, and a reset', image: imageFor(place.name, 5) },
   ];
 
-  const fallbackAttractions = [
-    { id: 'fallback-attraction-1', name: `${place.name} main viewpoint`, description: 'The easiest anchor for a short visit', image_url: imageFor(place.name, 6) },
-    { id: 'fallback-attraction-2', name: `${place.location} local market`, description: 'Food, small shops, and local texture', image_url: imageFor(place.location, 7) },
-    { id: 'fallback-attraction-3', name: 'Old streets and cultural stops', description: 'A simple route for history and atmosphere', image_url: imageFor(place.name, 8) },
+  const attractions = [
+    { title: `${place.name} main viewpoint`, subtitle: 'The easiest anchor for a short visit', image: imageFor(place.name, 6) },
+    { title: `${place.location} local market`, subtitle: 'Food, small shops, and local texture', image: imageFor(place.location, 7) },
+    { title: 'Old streets and cultural stops', subtitle: 'A simple route for history and atmosphere', image: imageFor(place.name, 8) },
   ];
 
-  const fallbackFaqs = [
+  const faqs = [
     {
-      id: 'fallback-faq-1',
       question: `Is ${place.name} safe for travelers?`,
       answer: `The current safety score is ${place.safety.toFixed(1)}. Read community safety notes before you go.`,
     },
     {
-      id: 'fallback-faq-2',
       question: 'When should I visit?',
       answer: 'Earlier in the day is usually better for calmer crowds, better light, and easier planning.',
     },
     {
-      id: 'fallback-faq-3',
       question: 'Can I plan a full trip from here?',
       answer: 'Yes. Use Plan a Trip and Tripser will take you into the planner flow.',
     },
   ];
-
-  const visibleHiddenGems = hiddenGems.length > 0 ? hiddenGems : fallbackHiddenGems;
-  const visibleThingsToDo = thingsToDo.length > 0 ? thingsToDo : fallbackThingsToDo;
-  const visibleAttractions = attractions.length > 0 ? attractions : fallbackAttractions;
-  const visibleFaqs = faqs.length > 0 ? faqs : fallbackFaqs;
 
   return (
     <div className="min-h-screen bg-gray-50 pb-12">
@@ -314,8 +273,8 @@ export default function PlaceDetails() {
           <section>
             <SectionHeader title="Hidden Gems" subtitle={`Low-key finds inside and around ${place.name}.`} />
             <div className="grid gap-5 md:grid-cols-3">
-              {visibleHiddenGems.map(gem => (
-                <ImageCard key={gem.id} title={gem.name} subtitle={gem.description || ''} image={gem.image_url || imageFor(gem.name, 0)} />
+              {hiddenGems.map(gem => (
+                <ImageCard key={gem.title} title={gem.title} subtitle={gem.subtitle} image={gem.image} />
               ))}
             </div>
           </section>
@@ -323,8 +282,8 @@ export default function PlaceDetails() {
           <section>
             <SectionHeader title="Things To Do" subtitle="Simple, high-signal ideas for spending your time well." />
             <div className="grid gap-5 md:grid-cols-3">
-              {visibleThingsToDo.map(item => (
-                <ImageCard key={item.id} title={item.name} subtitle={item.description || ''} image={item.image_url || imageFor(item.name, 3)} />
+              {thingsToDo.map(item => (
+                <ImageCard key={item.title} title={item.title} subtitle={item.subtitle} image={item.image} />
               ))}
             </div>
           </section>
@@ -332,8 +291,8 @@ export default function PlaceDetails() {
           <section>
             <SectionHeader title="Popular Attractions" subtitle="Recognizable stops that help anchor the itinerary." />
             <div className="grid gap-5 md:grid-cols-3">
-              {visibleAttractions.map(item => (
-                <ImageCard key={item.id} title={item.name} subtitle={item.description || ''} image={item.image_url || imageFor(item.name, 6)} />
+              {attractions.map(item => (
+                <ImageCard key={item.title} title={item.title} subtitle={item.subtitle} image={item.image} />
               ))}
             </div>
           </section>
@@ -429,8 +388,8 @@ export default function PlaceDetails() {
               <HelpCircle className="text-primary" size={22} /> FAQs
             </h2>
             <div className="grid gap-3 md:grid-cols-3">
-              {visibleFaqs.map(faq => (
-                <details key={faq.id} className="rounded-xl border border-gray-100 p-4">
+              {faqs.map(faq => (
+                <details key={faq.question} className="rounded-xl border border-gray-100 p-4">
                   <summary className="cursor-pointer font-bold text-accent">{faq.question}</summary>
                   <p className="mt-3 text-sm leading-relaxed text-muted">{faq.answer}</p>
                 </details>
