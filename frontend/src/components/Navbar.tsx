@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import type React from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Plane, Map, Calendar, Wallet, User, Menu, X, Users, LogOut, ChevronDown, Settings, Camera, Loader2, ArrowLeft } from 'lucide-react';
+import { Plane, Map, Calendar, Wallet, User, Menu, X, Users, LogOut, ChevronDown, Settings, Camera, Loader2, ArrowLeft, MapPin } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../lib/utils';
 import SignIn from '../pages/SignIn';
@@ -434,6 +434,20 @@ export default function Navbar() {
                       >
                         <Settings size={16} className="text-muted" /> Edit Profile
                       </button>
+                      <Link
+                        to="/my-trips"
+                        onClick={() => setIsUserMenuOpen(false)}
+                        className="w-full flex items-center gap-2 px-4 py-3 text-sm text-accent hover:bg-gray-50 transition-colors"
+                      >
+                        <MapPin size={16} className="text-muted" /> My Trips
+                      </Link>
+                      <Link
+                        to="/wallet"
+                        onClick={() => setIsUserMenuOpen(false)}
+                        className="w-full flex items-center gap-2 px-4 py-3 text-sm text-accent hover:bg-gray-50 transition-colors"
+                      >
+                        <Wallet size={16} className="text-muted" /> Wallet
+                      </Link>
                       <button
                         onClick={handleSignOut}
                         className="w-full flex items-center gap-2 px-4 py-3 text-sm text-red-500 hover:bg-red-50 transition-colors"

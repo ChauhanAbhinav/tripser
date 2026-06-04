@@ -66,20 +66,79 @@ CREATE TABLE IF NOT EXISTS travel_documents (
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
+-- Cities (for fast destination lookup)
+CREATE TABLE IF NOT EXISTS cities (
+  id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name         TEXT NOT NULL,
+  country      TEXT NOT NULL,
+  country_code TEXT NOT NULL,
+  lat          NUMERIC(10,7),
+  lng          NUMERIC(10,7),
+  timezone     TEXT,
+  currency     TEXT,
+  avg_daily_budget_low    NUMERIC(8,2),
+  avg_daily_budget_mid    NUMERIC(8,2),
+  avg_daily_budget_high   NUMERIC(8,2),
+  best_months  INTEGER[],
+  safety_score NUMERIC(4,2),
+  is_active    BOOLEAN DEFAULT true
+);
+
 -- Places (Primary Discovery Entities)
 CREATE TABLE IF NOT EXISTS places (
   id SERIAL PRIMARY KEY,
   name TEXT NOT NULL,
+  slug TEXT UNIQUE,
+  category TEXT DEFAULT 'attraction',
+  sub_category TEXT,
+  city TEXT DEFAULT 'Unknown',
+  country TEXT DEFAULT 'Unknown',
+  region TEXT,
   location TEXT NOT NULL,
-  country TEXT,
+  address TEXT,
   description TEXT,
   image_url TEXT,
+  image_urls TEXT[] DEFAULT '{}',
   price_range TEXT,
+  price_tier TEXT DEFAULT 'mid',
+  avg_cost_pp NUMERIC(8,2),
+  avg_duration_mins INTEGER DEFAULT 60,
+  best_time_of_day TEXT[],
+  best_months INTEGER[],
   safety_score NUMERIC,
   accessibility_score NUMERIC,
   sensory_score NUMERIC,
-  tags TEXT[],
+  popularity_score NUMERIC(4,2) DEFAULT 0,
+  value_score NUMERIC(4,2) DEFAULT 0,
+  tags TEXT[] DEFAULT '{}',
+  vibes TEXT[] DEFAULT '{}',
+  is_active BOOLEAN DEFAULT true,
+  is_verified BOOLEAN DEFAULT false,
+  source TEXT DEFAULT 'manual',
+  lat NUMERIC(10, 7),
+  lng NUMERIC(10, 7),
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Place Stats (Separated for high write volume)
+CREATE TABLE IF NOT EXISTS place_stats (
+  place_id        INTEGER REFERENCES places(id) ON DELETE CASCADE PRIMARY KEY,
+  view_count      INTEGER DEFAULT 0,
+  save_count      INTEGER DEFAULT 0,
+  trip_count      INTEGER DEFAULT 0,
+  review_count    INTEGER DEFAULT 0,
+  avg_rating      NUMERIC(3,2) DEFAULT 0,
+  updated_at      TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Place Hours
+CREATE TABLE IF NOT EXISTS place_hours (
+  id        SERIAL PRIMARY KEY,
+  place_id  INTEGER REFERENCES places(id) ON DELETE CASCADE,
+  day_of_week INTEGER NOT NULL,
+  opens_at  TIME,
+  closes_at TIME,
+  is_closed BOOLEAN DEFAULT false
 );
 
 -- Packing Lists (Dynamic Itinerary Items)
@@ -90,6 +149,30 @@ CREATE TABLE IF NOT EXISTS packing_lists (
   completed BOOLEAN DEFAULT false,
   items JSONB DEFAULT '[]'::jsonb,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Trip Templates
+CREATE TABLE IF NOT EXISTS trip_templates (
+  id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  city_id      UUID REFERENCES cities(id),
+  title        TEXT NOT NULL,
+  days         INTEGER NOT NULL,
+  pace         TEXT NOT NULL,
+  budget_tier  TEXT NOT NULL,
+  tags         TEXT[] DEFAULT '{}',
+  use_count    INTEGER DEFAULT 0,
+  is_featured  BOOLEAN DEFAULT false,
+  created_at   TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Template Places
+CREATE TABLE IF NOT EXISTS template_places (
+  id           SERIAL PRIMARY KEY,
+  template_id  UUID REFERENCES trip_templates(id) ON DELETE CASCADE,
+  place_id     INTEGER REFERENCES places(id),
+  day_number   INTEGER NOT NULL,
+  time_slot    TEXT NOT NULL,
+  order_index  INTEGER NOT NULL
 );
 
 -- Budget per trip
@@ -120,6 +203,15 @@ CREATE TABLE IF NOT EXISTS expenses (
   receipt_url TEXT,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
+
+-- RPC Function for Trip Counts
+CREATE OR REPLACE FUNCTION increment_trip_counts(place_ids INTEGER[])
+RETURNS void AS $$
+  UPDATE place_stats
+  SET trip_count = trip_count + 1,
+      updated_at = NOW()
+  WHERE place_id = ANY(place_ids);
+$$ LANGUAGE SQL;
 
 -- ==========================================
 -- 2. TRIGGERS
@@ -183,7 +275,18 @@ CREATE POLICY "Users manage own budgets" ON trip_budgets FOR ALL USING (auth.uid
 CREATE POLICY "Users manage own expenses" ON expenses FOR ALL USING (auth.uid() = user_id);
 
 -- ==========================================
--- 4. COMMUNITY HUB SETUP 
+-- 4. INDEXES (Critical for Algorithm Performance)
+-- ==========================================
+CREATE INDEX IF NOT EXISTS idx_places_city ON places(city, country);
+CREATE INDEX IF NOT EXISTS idx_places_category ON places(category);
+CREATE INDEX IF NOT EXISTS idx_places_popularity ON places(popularity_score DESC);
+CREATE INDEX IF NOT EXISTS idx_places_tags ON places USING GIN(tags);
+CREATE INDEX IF NOT EXISTS idx_places_vibes ON places USING GIN(vibes);
+CREATE INDEX IF NOT EXISTS idx_cities_name ON cities(name, country_code);
+CREATE INDEX IF NOT EXISTS idx_place_stats_trip_count ON place_stats(trip_count DESC);
+
+-- ==========================================
+-- 5. COMMUNITY HUB SETUP 
 -- ==========================================
 
 -- Add tables to the realtime publication
@@ -191,7 +294,7 @@ ALTER PUBLICATION supabase_realtime ADD TABLE live_vibes;
 ALTER PUBLICATION supabase_realtime ADD TABLE expenses;
 
 -- ==========================================
--- 5. STORAGE BUCKETS & POLICIES
+-- 6. STORAGE BUCKETS & POLICIES
 -- ==========================================
 
 -- Create 'avatars' bucket if it doesn't exist

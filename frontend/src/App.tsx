@@ -10,6 +10,7 @@ import Discovery from './pages/Discovery';
 import PlaceDetails from './pages/PlaceDetails';
 import TravelStoryDetails from './pages/TravelStoryDetails';
 import Planner from './pages/Planner';
+import Itinerary from './pages/Itinerary';
 import Wallet from './pages/Wallet';
 import Dashboard from './pages/Dashboard';
 import SOSButton from './components/SOSButton';
@@ -18,6 +19,7 @@ import AuthCallback from './pages/AuthCallback';
 import ProtectedRoute from './components/ProtectedRoute';
 import { ToastProvider } from './components/Toast';
 import CompleteProfileModal from './components/CompleteProfileModal';
+import MyTrips from './pages/MyTrips';
 
 export default function App() {
   return (
@@ -32,6 +34,8 @@ export default function App() {
               <Route path="/discovery/place/:id" element={<PlaceDetails />} />
               <Route path="/community/stories/:id" element={<TravelStoryDetails />} />
               <Route path="/planner" element={<Planner />} />
+              <Route path="/itinerary" element={<Itinerary />} />
+              <Route path="/my-trips" element={<MyTrips />} />
               <Route 
                 path="/wallet" 
                 element={

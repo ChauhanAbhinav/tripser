@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
-import { MapPin, Globe, Leaf, Users, ChevronRight, Loader2, CheckSquare, Square, WalletCards, Receipt, X, Plus, Archive, RefreshCw, AlertCircle, ChevronDown, Compass, BookOpen, HeartHandshake, Sparkles, Map as MapIcon, TrendingUp } from 'lucide-react';
+import { MapPin, Globe, Leaf, Users, ChevronRight, Loader2, CheckSquare, Square, WalletCards, Receipt, X, Plus, Archive, RefreshCw, AlertCircle, ChevronDown, Compass, BookOpen, HeartHandshake, Sparkles, Map as MapIcon, TrendingUp, Hotel, Utensils, Bus, Ticket, ShoppingBag, Pill, Package, Plane } from 'lucide-react';
 import { api } from '../services/api';
 import { supabase } from '../lib/supabaseClient';
 import { getValidatedAuthSession } from '../lib/authSession';
@@ -27,13 +27,13 @@ type PackingItem = { id: string; name: string; packed: boolean; category?: strin
 export type PackingListType = { id: string; category: string; items: PackingItem[], completed: boolean };
 
 export const EXPENSE_CATEGORIES = [
-  { id: 'accommodation', label: 'Accommodation', icon: '🏨', color: 'text-indigo-500', bg: 'bg-indigo-50', hex: '#6366f1' },
-  { id: 'food',          label: 'Food & Drink',  icon: '🍜', color: 'text-amber-500', bg: 'bg-amber-50', hex: '#f59e0b' },
-  { id: 'transport',     label: 'Transport',     icon: '🚌', color: 'text-blue-500', bg: 'bg-blue-50', hex: '#3b82f6' },
-  { id: 'activities',    label: 'Activities',    icon: '🎭', color: 'text-emerald-500', bg: 'bg-emerald-50', hex: '#10b981' },
-  { id: 'shopping',      label: 'Shopping',      icon: '🛍️', color: 'text-pink-500', bg: 'bg-pink-50', hex: '#ec4899' },
-  { id: 'health',        label: 'Health',        icon: '💊', color: 'text-red-500', bg: 'bg-red-50', hex: '#ef4444' },
-  { id: 'misc',          label: 'Miscellaneous', icon: '📦', color: 'text-purple-500', bg: 'bg-purple-50', hex: '#8b5cf6' },
+  { id: 'accommodation', label: 'Accommodation', icon: <Hotel size={20} />, color: 'text-indigo-500', bg: 'bg-indigo-50', hex: '#6366f1' },
+  { id: 'food',          label: 'Food & Drink',  icon: <Utensils size={20} />, color: 'text-amber-500', bg: 'bg-amber-50', hex: '#f59e0b' },
+  { id: 'transport',     label: 'Transport',     icon: <Bus size={20} />, color: 'text-blue-500', bg: 'bg-blue-50', hex: '#3b82f6' },
+  { id: 'activities',    label: 'Activities',    icon: <Ticket size={20} />, color: 'text-emerald-500', bg: 'bg-emerald-50', hex: '#10b981' },
+  { id: 'shopping',      label: 'Shopping',      icon: <ShoppingBag size={20} />, color: 'text-pink-500', bg: 'bg-pink-50', hex: '#ec4899' },
+  { id: 'health',        label: 'Health',        icon: <Pill size={20} />, color: 'text-red-500', bg: 'bg-red-50', hex: '#ef4444' },
+  { id: 'misc',          label: 'Miscellaneous', icon: <Package size={20} />, color: 'text-purple-500', bg: 'bg-purple-50', hex: '#8b5cf6' },
 ];
 
 const MOCK_FRIENDS = [
@@ -464,7 +464,7 @@ export default function Dashboard() {
                       Travel DNA {isAiLoading && <Loader2 size={12} className="animate-spin" />}
                     </span>
                     <div className="flex items-center gap-4 mb-4">
-                      <span className="text-5xl">{aiProfile?.dna?.icon || '✈️'}</span>
+                    <span className="text-primary">{aiProfile?.dna?.icon ? <span className="text-5xl">{aiProfile.dna.icon}</span> : <Plane size={48} />}</span>
                       <div>
                         <h4 className="text-2xl font-display font-bold text-accent leading-tight">{aiProfile?.dna?.title}</h4>
                         <p className="text-sm text-primary font-bold mt-1">{aiProfile?.dna?.subtitle}</p>

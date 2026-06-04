@@ -1,8 +1,7 @@
 import React, { useState, type FormEvent } from 'react';
 import { motion } from 'motion/react';
-import { Search, MapPin, Sparkles, Play, ChevronRight, Sun, Snowflake, CloudRain, CloudSun, Plane, Ticket, Settings } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
-import { cn } from '../lib/utils';
+import { Search, MapPin, Sparkles, Play, ChevronRight, Sun, Snowflake, CloudRain, CloudSun, Plane, Ticket, Settings, Map } from 'lucide-react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 
 export default function Home() {
   const [query, setQuery] = useState('');
@@ -12,6 +11,14 @@ export default function Home() {
     e.preventDefault();
     if (query.trim()) {
       navigate(`/discovery?q=${encodeURIComponent(query)}`);
+    }
+  };
+
+  const handlePlanTrip = () => {
+    if (query.trim()) {
+      navigate(`/planner?dest=${encodeURIComponent(query)}`);
+    } else {
+      navigate('/planner');
     }
   };
 
@@ -45,40 +52,42 @@ export default function Home() {
               A next-gen travel app that creates personalized itineraries that are safe, efficient, and entirely hassle-free. Leave the planning to us and get ready for unforgettable adventures tailored just for your unique travel style.
             </p>
             <div className="flex flex-col sm:flex-row gap-4 items-center w-full">
-              <button onClick={() => navigate('/discovery')} className="w-full sm:w-auto btn-secondary px-6 sm:px-8 py-3.5 sm:py-4 text-base sm:text-lg flex items-center justify-center gap-2">
-                Find out more
+              <button onClick={() => navigate('/discovery')} className="w-full sm:w-auto btn-secondary px-6 sm:px-8 py-3.5 sm:py-4 text-base sm:text-lg flex items-center justify-center gap-2 shadow-sm hover:shadow-md transition-all">
+                <Search size={20} /> Discover Places
               </button>
-              <button className="w-full sm:w-auto flex items-center justify-center sm:justify-start gap-4 group py-3 sm:py-0">
-                <div className="w-12 h-12 rounded-full bg-primary flex items-center justify-center text-white shadow-lg shadow-primary/30 group-hover:scale-110 transition-transform shrink-0">
-                  <Play fill="currentColor" size={16} />
-                </div>
-                <span className="text-muted font-medium group-hover:text-accent transition-colors">Play Demo</span>
+              <button onClick={handlePlanTrip} className="w-full sm:w-auto btn-primary px-6 sm:px-8 py-3.5 sm:py-4 text-base sm:text-lg flex items-center justify-center gap-2 shadow-lg shadow-primary/30 transition-all">
+                <Map size={20} /> Plan a Trip
               </button>
             </div>
 
-            {/* AI Search Bar */}
+            {/* Search Bar */}
             <motion.div 
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.4 }}
-              className="mt-10 sm:mt-16 w-full max-w-xl"
+              className="mt-10 sm:mt-12 w-full max-w-xl"
             >
               <form onSubmit={handleSearch} className="relative group w-full">
                 <div className="absolute -inset-1 bg-gradient-to-r from-primary to-secondary rounded-2xl blur opacity-25 group-hover:opacity-50 transition duration-1000 group-hover:duration-200"></div>
-              <div className="relative flex items-center bg-white rounded-xl shadow-2xl p-1.5 sm:p-2 w-full">
+                <div className="relative flex items-center bg-white rounded-xl shadow-2xl p-1.5 sm:p-2 w-full">
                   <div className="flex-1 flex items-center pl-3 sm:pl-4 pr-2 sm:pr-4 min-w-0">
                     <Sparkles className="text-primary mr-2 sm:mr-3 shrink-0" size={20} />
                     <input
                       type="text"
                       value={query}
                       onChange={(e) => setQuery(e.target.value)}
-                    placeholder="Where to? (e.g. 'Hidden gems in Italy')"
-                      className="w-full py-2.5 sm:py-3 outline-none text-accent placeholder:text-muted/60 bg-transparent text-sm sm:text-base min-w-0 truncate"
+                      placeholder="Where do you want to go? (e.g. 'Rome')"
+                      className="w-full py-2.5 sm:py-3 outline-none text-accent placeholder:text-muted/60 bg-transparent text-sm sm:text-base min-w-0 truncate font-medium"
                     />
                   </div>
-                <button type="submit" className="bg-accent text-white p-2.5 sm:p-4 rounded-lg hover:bg-opacity-90 transition-all shrink-0">
-                    <Search size={20} />
-                  </button>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button type="submit" className="bg-gray-100 text-muted hover:text-accent p-2.5 sm:p-3.5 rounded-lg transition-all" title="Discover">
+                      <Search size={20} />
+                    </button>
+                    <button type="button" onClick={handlePlanTrip} className="bg-accent text-white p-2.5 sm:p-3.5 rounded-lg hover:bg-opacity-90 transition-all shadow-md flex items-center gap-2" title="Plan Trip">
+                      <Map size={20} /> <span className="hidden sm:inline text-sm font-bold">Plan</span>
+                    </button>
+                  </div>
                 </div>
               </form>
               <div className="mt-3 sm:mt-4 flex gap-2 sm:gap-3 overflow-x-auto pb-2 no-scrollbar w-full -mx-1 px-1 sm:mx-0 sm:px-0">
@@ -86,7 +95,7 @@ export default function Home() {
                   <button 
                     key={tag}
                     onClick={() => setQuery(tag)}
-                    className="whitespace-nowrap flex-shrink-0 px-3 sm:px-4 py-1 sm:py-1.5 rounded-full border border-gray-200 text-xs sm:text-sm text-muted hover:border-primary hover:text-primary transition-all"
+                    className="whitespace-nowrap flex-shrink-0 px-3 sm:px-4 py-1 sm:py-1.5 rounded-full border border-gray-200 text-xs sm:text-sm text-muted hover:border-primary hover:text-primary transition-all font-medium bg-white/50 backdrop-blur-sm"
                   >
                     {tag}
                   </button>
@@ -140,7 +149,7 @@ export default function Home() {
               <span className="text-primary font-bold uppercase tracking-widest text-sm block mb-2">Curated For You</span>
               <h2 className="text-3xl lg:text-4xl font-display font-bold text-accent">Seasonal Budget Picks</h2>
             </div>
-            <button className="text-primary font-bold hover:underline flex items-center gap-1">View all <ChevronRight size={16}/></button>
+            <button onClick={() => navigate('/discovery')} className="text-primary font-bold hover:underline flex items-center gap-1">View all <ChevronRight size={16}/></button>
           </div>
           
           <div className="grid md:grid-cols-3 gap-6">

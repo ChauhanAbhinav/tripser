@@ -1,67 +1,11 @@
 -- ==========================================
--- supabase/seed.sql
--- Run: supabase db reset (applies migrations + this seed)
+-- supabase/test.sql
+-- Run this manually if you need test data (e.g. for development UI)
 -- ==========================================
 
 -- ==========================================
--- 1. PLACES
+-- 1. COMMUNITY INSIGHTS & TEST METADATA
 -- ==========================================
-
-INSERT INTO places (name, location, description, image_url, price_range, safety_score, accessibility_score, sensory_score, tags) VALUES
-  (
-    'Kotor Old Town',
-    'Montenegro',
-    'A walled medieval city on the Adriatic coast, far less crowded than Dubrovnik. Cobblestone streets, cat cafes, and stunning bay views.',
-    'https://images.unsplash.com/photo-1555990793-da11153b2473?w=800&auto=format',
-    '$800 - $1,200',
-    9.2, 7.5, 8.0,
-    ARRAY['Hidden Gem', 'Safe', 'Historic']
-  ),
-  (
-    'Matera',
-    'Italy',
-    'Ancient cave city (Sassi) carved into rock — one of the oldest continuously inhabited settlements on Earth. Eerily beautiful at night.',
-    'https://images.unsplash.com/photo-1533421644343-45b606a69f48?w=800&auto=format',
-    '$900 - $1,400',
-    8.8, 6.5, 9.1,
-    ARRAY['UNESCO', 'Quiet', 'Unique', 'Solo Friendly']
-  ),
-  (
-    'Luang Prabang',
-    'Laos',
-    'Serene Buddhist temples, night markets, turquoise waterfalls, and monk alms-giving ceremonies. Minimal tourist crowds year-round.',
-    'https://images.unsplash.com/photo-1528360983277-13d401cdc186?w=800&auto=format',
-    '$600 - $1,000',
-    8.5, 7.0, 9.3,
-    ARRAY['Spiritual', 'Budget', 'Nature', 'Solo Friendly']
-  ),
-  (
-    'Gjirokastra',
-    'Albania',
-    'A UNESCO-listed Ottoman stone city perched in the mountains. Almost entirely undiscovered by mainstream tourism.',
-    'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=800&auto=format',
-    '$500 - $800',
-    8.0, 6.0, 9.5,
-    ARRAY['Hidden Gem', 'Historic', 'Budget']
-  ),
-  (
-    'Chefchaouen',
-    'Morocco',
-    'The famous Blue City nestled in the Rif Mountains. Labyrinthine medina painted in every shade of blue — incredibly photogenic and calm.',
-    'https://images.unsplash.com/photo-1489749798305-4fea3ae63d43?w=800&auto=format',
-    '$700 - $1,100',
-    8.3, 6.8, 8.7,
-    ARRAY['Scenic', 'Culture', 'Photography', 'Women Friendly']
-  ),
-  (
-    'Tbilisi Old Town',
-    'Georgia',
-    'Sulfur bathhouses, cliff-side churches, eclectic architecture mixing Persian, Russian, and European styles. Incredible food scene on a budget.',
-    'https://images.unsplash.com/photo-1565008576549-57569a49371d?w=800&auto=format',
-    '$600 - $1,000',
-    8.6, 7.2, 8.4,
-    ARRAY['Hidden Gem', 'Foodie', 'Architecture', 'Budget']
-  );
 
 INSERT INTO place_hidden_gems (place_id, name, description, image_url, tags)
 SELECT id, 'Quiet backstreet viewpoint', 'A calmer photo stop away from the main walking route.', image_url, ARRAY['Quiet', 'Viewpoint']

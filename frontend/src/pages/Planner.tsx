@@ -1,331 +1,988 @@
-import React, { useState } from 'react';
-import { motion, Reorder, AnimatePresence } from 'motion/react';
-import { Map as MapGL } from 'react-map-gl';
-import 'mapbox-gl/dist/mapbox-gl.css';
-import {
-  Clock,
-  MapPin,
-  Map,
-  X,
-  WifiOff,
-  Save,
-  Plane,
-  Hotel,
-  Utensils,
-  AlertCircle,
-  RefreshCw,
-  ChevronRight,
-  Plus,
-  MoreVertical,
-  ShieldCheck
-} from 'lucide-react';
-import { cn } from '../lib/utils';
-import { generatePivotItinerary } from '../services/gemini';
-import { api } from '../services/api';
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * Planner.tsx — Screen 1: Trip Input Form
+ *
+ * Layout:
+ *   - Hero section with animated background
+ *   - Center: Trip Input Form (destination, dates, travelers, budget, vibes, pace)
+ *   - Below form: Saved Itineraries (authenticated users)
+ *   - Right rail (desktop): Suggested Trip Templates from DB
+ *
+ * Data sources:
+ *   - cities table       → destination autocomplete
+ *   - trip_templates     → suggested trips right panel
+ *   - itineraries        → saved trips (auth users)
+ *   - places             → popular destination chips (top by popularity_score)
+ *
+ * On submit → navigate('/itinerary?dest=...&days=...&travelers=...&budget=...&vibes=...&pace=...&females=...')
+ */
 
-interface ItineraryItem {
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
+import { useNavigate } from 'react-router-dom';
+import {
+  Search, Calendar, Users, Wallet, Zap, MapPin, Clock,
+  ChevronRight, Star, Sparkles, Shield, Globe, ArrowRight,
+  Mountain, Utensils, Palette, Waves, ShoppingBag, Leaf,
+  Music, Eye, Smile, Compass, Plus, Minus, X, CheckCircle2,
+  Hotel, Plane, BookOpen, TrendingUp, Heart
+} from 'lucide-react';
+import { supabase } from '../lib/supabaseClient';
+import { useAuth } from '../hooks/userAuth';
+import { cn } from '../lib/utils';
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+interface City {
   id: string;
-  type: 'flight' | 'hotel' | 'food' | 'alert' | 'transit';
-  time: string;
-  title: string;
-  location: string;
-  status?: string;
+  name: string;
+  country: string;
+  country_code: string;
+  safety_score: number;
+  avg_daily_budget_mid: number;
+  best_months: number[];
 }
 
-const INITIAL_ITEMS: ItineraryItem[] = [
-  { id: '1', type: 'flight', time: '09:00 AM', title: 'Flight to Rome', location: 'JFK Airport', status: 'On Time' },
-  { id: '2', type: 'hotel', time: '02:00 PM', title: 'Check-in: Hotel de la Ville', location: 'Via Sistina, 69', status: 'Confirmed' },
-  { id: '3', type: 'food', time: '07:30 PM', title: 'Dinner at Armando al Pantheon', location: "Salita de' Crescenzi, 31", status: 'Reserved' },
+interface TripTemplate {
+  id: string;
+  title: string;
+  days: number;
+  pace: string;
+  budget_tier: string;
+  tags: string[];
+  use_count: number;
+  is_featured: boolean;
+  cities?: { name: string; country: string };
+}
+
+interface SavedItinerary {
+  id: string;
+  title: string;
+  destination: string;
+  start_date: string;
+  end_date: string;
+  created_at: string;
+}
+
+// ─── Constants ────────────────────────────────────────────────────────────────
+
+const POPULAR_DESTINATIONS = [
+  { name: 'Rome', country: 'Italy', emoji: '🏛' },
+  { name: 'Tokyo', country: 'Japan', emoji: '⛩' },
+  { name: 'Bali', country: 'Indonesia', emoji: '🌴' },
+  { name: 'Paris', country: 'France', emoji: '🗼' },
+  { name: 'New York', country: 'USA', emoji: '🗽' },
+  { name: 'Barcelona', country: 'Spain', emoji: '🎨' },
 ];
 
+const VIBE_OPTIONS = [
+  { id: 'history',     label: 'History',       icon: BookOpen,    color: 'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100' },
+  { id: 'food',        label: 'Food & Drink',   icon: Utensils,    color: 'bg-orange-50 text-orange-700 border-orange-200 hover:bg-orange-100' },
+  { id: 'beach',       label: 'Beach',          icon: Waves,       color: 'bg-sky-50 text-sky-700 border-sky-200 hover:bg-sky-100' },
+  { id: 'hiking',      label: 'Hiking',         icon: Mountain,    color: 'bg-green-50 text-green-700 border-green-200 hover:bg-green-100' },
+  { id: 'markets',     label: 'Markets',        icon: ShoppingBag, color: 'bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100' },
+  { id: 'arts',        label: 'Arts & Culture', icon: Palette,     color: 'bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100' },
+  { id: 'nature',      label: 'Nature',         icon: Leaf,        color: 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100' },
+  { id: 'nightlife',   label: 'Nightlife',      icon: Music,       color: 'bg-pink-50 text-pink-700 border-pink-200 hover:bg-pink-100' },
+  { id: 'hidden-gems', label: 'Hidden Gems',    icon: Eye,         color: 'bg-violet-50 text-violet-700 border-violet-200 hover:bg-violet-100' },
+  { id: 'wellness',    label: 'Wellness',       icon: Smile,       color: 'bg-teal-50 text-teal-700 border-teal-200 hover:bg-teal-100' },
+  { id: 'adventure',   label: 'Adventure',      icon: Compass,     color: 'bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100' },
+  { id: 'social',      label: 'Social',         icon: Users,       color: 'bg-yellow-50 text-yellow-700 border-yellow-200 hover:bg-yellow-100' },
+];
+
+const PACE_OPTIONS = [
+  {
+    id: 'relaxed',
+    label: 'Relaxed',
+    icon: '😌',
+    description: '2–3 stops/day',
+    sub: 'Slow travel, lots of rest',
+  },
+  {
+    id: 'balanced',
+    label: 'Balanced',
+    icon: '⚖️',
+    description: '4–5 stops/day',
+    sub: 'Mix of activity & rest',
+  },
+  {
+    id: 'packed',
+    label: 'Packed',
+    icon: '⚡',
+    description: '6+ stops/day',
+    sub: 'Maximum sights & experiences',
+  },
+];
+
+const BUDGET_TIERS = [
+  { id: 'budget',  label: 'Budget',  icon: '💰', desc: '< $80/day',   color: 'border-emerald-200 bg-emerald-50 text-emerald-800' },
+  { id: 'mid',     label: 'Mid',     icon: '🎯', desc: '$80–200/day', color: 'border-blue-200 bg-blue-50 text-blue-800' },
+  { id: 'luxury',  label: 'Luxury',  icon: '💎', desc: '$200+/day',   color: 'border-amber-200 bg-amber-50 text-amber-800' },
+];
+
+const DURATION_PRESETS = [3, 5, 7, 10, 14];
+
+const MONTH_NAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+// ─── Sub-components ───────────────────────────────────────────────────────────
+
+const SectionDivider = ({ label }: { label: string }) => (
+  <div className="flex items-center gap-4 my-8">
+    <div className="flex-1 h-px bg-gray-100" />
+    <span className="text-xs font-bold text-muted uppercase tracking-widest">{label}</span>
+    <div className="flex-1 h-px bg-gray-100" />
+  </div>
+);
+
+const Counter = ({
+  value, onChange, min = 0, max = 20, label, sublabel
+}: {
+  value: number; onChange: (v: number) => void;
+  min?: number; max?: number; label: string; sublabel?: string;
+}) => (
+  <div className="flex items-center justify-between py-3 border-b border-gray-50 last:border-0">
+    <div>
+      <p className="font-semibold text-accent text-sm">{label}</p>
+      {sublabel && <p className="text-xs text-muted mt-0.5">{sublabel}</p>}
+    </div>
+    <div className="flex items-center gap-3">
+      <button
+        type="button"
+        onClick={() => onChange(Math.max(min, value - 1))}
+        className="w-9 h-9 rounded-full border-2 border-gray-200 flex items-center justify-center text-muted hover:border-primary hover:text-primary transition-all disabled:opacity-30"
+        disabled={value <= min}
+      >
+        <Minus size={14} />
+      </button>
+      <span className="w-6 text-center font-bold text-accent text-lg">{value}</span>
+      <button
+        type="button"
+        onClick={() => onChange(Math.min(max, value + 1))}
+        className="w-9 h-9 rounded-full border-2 border-gray-200 flex items-center justify-center text-muted hover:border-primary hover:text-primary transition-all disabled:opacity-30"
+        disabled={value >= max}
+      >
+        <Plus size={14} />
+      </button>
+    </div>
+  </div>
+);
+
+// ─── Main Component ───────────────────────────────────────────────────────────
+
 export default function Planner() {
-  const [items, setItems] = useState<ItineraryItem[]>(INITIAL_ITEMS);
-  const [isPivoting, setIsPivoting] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
-  const [showPivotAlert, setShowPivotAlert] = useState(false);
-  const [activeMap, setActiveMap] = useState<'safewalk' | 'sensory' | null>(null);
-  const [saveStatus, setSaveStatus] = useState<'idle' | 'saved'>('idle');
+  const navigate = useNavigate();
+  const { user } = useAuth();
+  const searchRef = useRef<HTMLDivElement>(null);
 
-  const handlePivot = async () => {
-    setIsPivoting(true);
-    setShowPivotAlert(false);
+  // ── Form State ──────────────────────────────────────────────────────────────
+  const [destination, setDestination] = useState('');
+  const [destinationQuery, setDestinationQuery] = useState('');
+  const [cityResults, setCityResults] = useState<City[]>([]);
+  const [showDropdown, setShowDropdown] = useState(false);
+  const [selectedCity, setSelectedCity] = useState<City | null>(null);
 
-    const disruption = "Flight to Rome delayed by 2 hours due to weather. Push all subsequent plans back by 2 hours.";
-    const newItinerary = await generatePivotItinerary(items, disruption);
+  const [startDate, setStartDate] = useState('');
+  const [days, setDays] = useState(5);
 
-    if (newItinerary && Array.isArray(newItinerary)) {
-      setItems(newItinerary as ItineraryItem[]);
-    } else {
-      const alertItem: ItineraryItem = {
-        id: `alert-${Date.now()}`,
-        type: 'alert',
-        time: 'ASAP',
-        title: 'Flight Delayed: 2h',
-        location: 'Re-routing active',
-        status: 'Action Required',
-      };
-      setItems(prev => [alertItem, ...prev]);
-    }
+  const [males, setMales] = useState(1);
+  const [females, setFemales] = useState(0);
+  const isSoloFemale = females === 1 && males === 0;
+  const totalTravelers = males + females;
 
-    setIsPivoting(false);
-    setShowPivotAlert(true);
+  const [budget, setBudget] = useState(1500);
+  const [budgetTier, setBudgetTier] = useState<'budget' | 'mid' | 'luxury'>('mid');
+
+  const [selectedVibes, setSelectedVibes] = useState<string[]>([]);
+  const [pace, setPace] = useState<'relaxed' | 'balanced' | 'packed'>('balanced');
+
+  // ── Data State ──────────────────────────────────────────────────────────────
+  const [templates, setTemplates] = useState<TripTemplate[]>([]);
+  const [savedTrips, setSavedTrips] = useState<SavedItinerary[]>([]);
+  const [loadingTemplates, setLoadingTemplates] = useState(true);
+  const [loadingSaved, setLoadingSaved] = useState(false);
+
+  // ── Errors / Validation ─────────────────────────────────────────────────────
+  const [errors, setErrors] = useState<Record<string, string>>({});
+
+  // ── Fetch city autocomplete ─────────────────────────────────────────────────
+  const searchCities = useCallback(async (q: string) => {
+    if (q.length < 2) { setCityResults([]); return; }
+    const { data } = await supabase
+      .from('cities')
+      .select('id,name,country,country_code,safety_score,avg_daily_budget_mid,best_months')
+      .ilike('name', `${q}%`)
+      .eq('is_active', true)
+      .limit(6);
+    setCityResults(data || []);
+  }, []);
+
+  useEffect(() => {
+    const t = setTimeout(() => searchCities(destinationQuery), 200);
+    return () => clearTimeout(t);
+  }, [destinationQuery, searchCities]);
+
+  // ── Fetch featured templates ────────────────────────────────────────────────
+  useEffect(() => {
+    const fetchTemplates = async () => {
+      setLoadingTemplates(true);
+      const { data } = await supabase
+        .from('trip_templates')
+        .select('*, cities(name, country)')
+        .eq('is_featured', true)
+        .order('use_count', { ascending: false })
+        .limit(6);
+      setTemplates(data || []);
+      setLoadingTemplates(false);
+    };
+    fetchTemplates();
+  }, []);
+
+  // ── Fetch saved itineraries (auth users only) ───────────────────────────────
+  useEffect(() => {
+    if (!user) return;
+    const fetchSaved = async () => {
+      setLoadingSaved(true);
+      const { data } = await supabase
+        .from('itineraries')
+        .select('id,title,destination,start_date,end_date,created_at')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false })
+        .limit(4);
+      setSavedTrips(data || []);
+      setLoadingSaved(false);
+    };
+    fetchSaved();
+  }, [user]);
+
+  // ── Close dropdown on outside click ────────────────────────────────────────
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (searchRef.current && !searchRef.current.contains(e.target as Node)) {
+        setShowDropdown(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  // ── Sync budget tier with slider ────────────────────────────────────────────
+  useEffect(() => {
+    if (budget < 500) setBudgetTier('budget');
+    else if (budget < 2000) setBudgetTier('mid');
+    else setBudgetTier('luxury');
+  }, [budget]);
+
+  // ── Vibe toggle ─────────────────────────────────────────────────────────────
+  const toggleVibe = (id: string) => {
+    setSelectedVibes(prev =>
+      prev.includes(id) ? prev.filter(v => v !== id) : [...prev, id]
+    );
   };
 
-  const handleSaveTrip = async () => {
-    setIsSaving(true);
-    try {
-      await api.saveItinerary("Weekend in Rome", "Rome, Italy", items);
-      setSaveStatus('saved');
-      setTimeout(() => setSaveStatus('idle'), 3000);
-    } catch (error) {
-      console.error("Failed to save trip", error instanceof Error ? error.message : error);
-    } finally {
-      setIsSaving(false);
+  // ── Select destination from chip or dropdown ────────────────────────────────
+  const selectDestination = (name: string, city?: City) => {
+    setDestination(name);
+    setDestinationQuery(name);
+    setSelectedCity(city || null);
+    setShowDropdown(false);
+    if (city?.avg_daily_budget_mid) {
+      const suggested = Math.round(city.avg_daily_budget_mid * days * totalTravelers);
+      setBudget(Math.max(200, Math.min(suggested, 10000)));
     }
   };
+
+  // ── Use template ────────────────────────────────────────────────────────────
+  const useTemplate = (t: TripTemplate) => {
+    if (t.cities) selectDestination(t.cities.name);
+    setDays(t.days);
+    setPace(t.pace as 'relaxed' | 'balanced' | 'packed');
+    setBudgetTier(t.budget_tier as 'budget' | 'mid' | 'luxury');
+    setBudget(t.budget_tier === 'budget' ? 800 : t.budget_tier === 'luxury' ? 4000 : 1500);
+    const vibes = t.tags.filter(tag =>
+      VIBE_OPTIONS.some(v => v.id === tag || v.label.toLowerCase() === tag.toLowerCase())
+    );
+    if (vibes.length) setSelectedVibes(vibes);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  // ── Validation & Submit ─────────────────────────────────────────────────────
+  const validate = () => {
+    const e: Record<string, string> = {};
+    if (!destination.trim()) e.destination = 'Please enter a destination.';
+    if (totalTravelers === 0) e.travelers = 'Add at least one traveler.';
+    if (selectedVibes.length === 0) e.vibes = 'Pick at least one vibe.';
+    setErrors(e);
+    return Object.keys(e).length === 0;
+  };
+
+  const handleSubmit = () => {
+    if (!validate()) return;
+    const params = new URLSearchParams({
+      dest:      destination,
+      days:      String(days),
+      travelers: String(totalTravelers),
+      males:     String(males),
+      females:   String(females),
+      budget:    String(budget),
+      tier:      budgetTier,
+      vibes:     selectedVibes.join(','),
+      pace,
+      ...(startDate && { start: startDate }),
+    });
+    navigate(`/itinerary?${params.toString()}`);
+  };
+
+  // ── Budget display ──────────────────────────────────────────────────────────
+  const budgetLabel =
+    budget < 500 ? `$${budget} — Backpacker` :
+    budget < 1200 ? `$${budget} — Budget` :
+    budget < 3000 ? `$${budget} — Comfortable` :
+    budget < 6000 ? `$${budget} — Premium` :
+    `$${budget} — Luxury`;
+
+  const budgetPerPersonPerDay = totalTravelers > 0 && days > 0
+    ? Math.round(budget / totalTravelers / days)
+    : 0;
+
+  // ─────────────────────────────────────────────────────────────────────────────
 
   return (
-    <div className="min-h-screen pt-24 pb-12 bg-gray-50">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        {/* Header */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-12">
-          <div>
-            <h1 className="text-3xl sm:text-4xl font-display font-bold text-accent">Trip Planner</h1>
-            <p className="text-muted mt-2 text-sm sm:text-base">Drag and drop to reorder. AI handles the rest.</p>
-          </div>
+    <div className="min-h-screen bg-gray-50">
 
-          <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
-            <button
-              onClick={handleSaveTrip}
-              disabled={isSaving || saveStatus === 'saved'}
-              className="flex-1 sm:flex-none btn-secondary py-2 px-4 sm:px-6 flex items-center justify-center gap-2 text-sm sm:text-base"
-            >
-              {saveStatus === 'saved' ? <ShieldCheck size={18} className="text-green-500" /> : <Save size={18} />}
-              {saveStatus === 'saved' ? 'Saved' : isSaving ? 'Saving...' : 'Save Trip'}
-            </button>
+      {/* ── Hero ─────────────────────────────────────────────────────────────── */}
+      <div className="relative bg-accent overflow-hidden">
+        {/* Subtle dot grid */}
+        <div
+          className="absolute inset-0 opacity-[0.07]"
+          style={{
+            backgroundImage: 'radial-gradient(circle, white 1px, transparent 1px)',
+            backgroundSize: '28px 28px',
+          }}
+        />
+        {/* Gradient orbs */}
+        <div className="absolute -top-24 -right-24 w-96 h-96 rounded-full bg-primary/20 blur-3xl" />
+        <div className="absolute -bottom-12 -left-12 w-64 h-64 rounded-full bg-blue-400/10 blur-2xl" />
 
-            <button
-              onClick={handlePivot}
-              disabled={isPivoting}
-              className={cn(
-                "flex-1 sm:flex-none btn-primary bg-accent flex items-center justify-center gap-2 relative overflow-hidden group text-sm sm:text-base",
-                isPivoting && "opacity-80"
-              )}
-            >
-              {isPivoting ? (
-                <RefreshCw size={18} className="animate-spin" />
-              ) : (
-                <RefreshCw size={18} className="group-hover:rotate-180 transition-transform duration-500" />
-              )}
-              AI Pivot
-              {isPivoting && <div className="absolute inset-0 bg-white/20 animate-pulse" />}
-            </button>
-            <button className="hidden sm:flex p-3 bg-white rounded-xl border border-gray-200 text-accent hover:border-primary transition-all">
-              <Plus size={20} />
-            </button>
-          </div>
-        </div>
-
-        {/* Pivot Alert */}
-        {showPivotAlert && (
+        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-32 pb-20">
           <motion.div
-            initial={{ opacity: 0, y: -20 }}
+            initial={{ opacity: 0, y: 24 }}
             animate={{ opacity: 1, y: 0 }}
-            className="mb-8 p-4 bg-primary/10 border border-primary/20 rounded-2xl flex items-center justify-between"
+            transition={{ duration: 0.6 }}
+            className="max-w-2xl"
           >
-            <div className="flex items-center gap-3 text-primary">
-              <AlertCircle size={20} />
-              <p className="font-medium">AI has detected a delay. Your itinerary has been optimized.</p>
+            <div className="flex items-center gap-2 mb-5">
+              <div className="w-2 h-2 rounded-full bg-primary animate-pulse" />
+              <span className="text-primary text-sm font-bold uppercase tracking-widest">Trip Planner</span>
             </div>
-            <button onClick={() => setShowPivotAlert(false)} className="text-primary hover:underline text-sm font-bold">
-              Dismiss
-            </button>
+            <h1 className="text-4xl sm:text-5xl lg:text-6xl font-display font-bold text-white leading-tight mb-5">
+              Build your perfect<br />
+              <span className="text-primary">trip in seconds.</span>
+            </h1>
+            <p className="text-white/60 text-lg font-medium max-w-lg leading-relaxed">
+              Our algorithm scans thousands of places, matches your vibe, and builds a day-by-day itinerary — instantly. No AI fluff, just smart routing.
+            </p>
           </motion.div>
-        )}
 
-        {/* Timeline */}
-        <div className="relative">
-          {/* Vertical Line */}
-          <div className="absolute left-6 sm:left-8 top-0 bottom-0 w-0.5 bg-gray-200 -z-10" />
-
-          <Reorder.Group axis="y" values={items} onReorder={setItems} className="space-y-6">
-            {items.map((item) => (
-              <Reorder.Item
-                key={item.id}
-                value={item}
-                className="relative pl-12 sm:pl-20"
-              >
-                {/* Timeline Dot */}
-                <div className={cn(
-                  "absolute left-[18px] sm:left-[26px] top-6 w-4 h-4 rounded-full border-4 border-white shadow-sm z-10",
-                  item.type === 'alert' ? "bg-red-500" : "bg-primary"
-                )} />
-
-                <div className={cn(
-                  "bg-white p-6 rounded-2xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow group cursor-grab active:cursor-grabbing",
-                  item.type === 'alert' && "border-red-100 bg-red-50/30"
-                )}>
-                  <div className="flex items-start justify-between">
-                    <div className="flex gap-4">
-                      <div className={cn(
-                        "w-12 h-12 rounded-xl flex items-center justify-center",
-                        item.type === 'flight' && "bg-blue-50 text-blue-500",
-                        item.type === 'hotel' && "bg-orange-50 text-orange-500",
-                        item.type === 'food' && "bg-green-50 text-green-500",
-                        item.type === 'alert' && "bg-red-100 text-red-500",
-                      )}>
-                        {item.type === 'flight' && <Plane size={24} />}
-                        {item.type === 'hotel' && <Hotel size={24} />}
-                        {item.type === 'food' && <Utensils size={24} />}
-                        {item.type === 'alert' && <AlertCircle size={24} />}
-                      </div>
-
-                      <div>
-                        <div className="flex items-center gap-2 mb-1">
-                          <Clock size={14} className="text-muted" />
-                          <span className="text-sm font-bold text-muted">{item.time}</span>
-                          {item.type === 'alert' && (
-                            <span className="px-2 py-0.5 bg-red-500 text-white text-[10px] font-bold rounded uppercase">Urgent</span>
-                          )}
-                        </div>
-                        <h3 className="text-lg font-bold text-accent">{item.title}</h3>
-                        <div className="flex items-center gap-1 text-muted text-sm mt-1">
-                          <MapPin size={14} />
-                          <span>{item.location}</span>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-4">
-                      <div className="text-right hidden sm:block">
-                        <p className={cn(
-                          "text-xs font-bold uppercase tracking-wider",
-                          item.status === 'Confirmed' ? "text-green-500" : "text-muted"
-                        )}>
-                          {item.status}
-                        </p>
-                        <div className="flex items-center gap-1 justify-end mt-1">
-                          <ShieldCheck size={12} className="text-green-500" />
-                          <span className="text-[10px] text-muted">Safe-Walk Verified</span>
-                        </div>
-                      </div>
-                      <button className="text-gray-300 hover:text-accent transition-colors">
-                        <MoreVertical size={20} />
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </Reorder.Item>
+          {/* Stats row */}
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.3, duration: 0.5 }}
+            className="flex flex-wrap gap-6 mt-10"
+          >
+            {[
+              { icon: Globe, label: '120+ Destinations' },
+              { icon: MapPin, label: '50K+ Places' },
+              { icon: Shield, label: 'Safety-verified' },
+              { icon: TrendingUp, label: 'Smart ranking' },
+            ].map(({ icon: Icon, label }) => (
+              <div key={label} className="flex items-center gap-2 text-white/60 text-sm font-medium">
+                <Icon size={16} className="text-primary" />
+                {label}
+              </div>
             ))}
-          </Reorder.Group>
-
-          {/* Add Item Placeholder */}
-          <div className="relative pl-12 sm:pl-20 mt-8">
-            <div className="absolute left-[18px] sm:left-[26px] top-6 w-4 h-4 rounded-full bg-gray-200 border-4 border-white" />
-            <button className="w-full p-6 rounded-2xl border-2 border-dashed border-gray-200 text-muted hover:border-primary hover:text-primary transition-all flex items-center justify-center gap-2 font-medium">
-              <Plus size={20} />
-              Add to Itinerary
-            </button>
-          </div>
+          </motion.div>
         </div>
+      </div>
 
-        {/* Safety & Navigation Quick Actions */}
-        <div className="mt-16 grid md:grid-cols-2 gap-6">
-          <div className="bg-accent text-white p-8 rounded-3xl relative overflow-hidden group">
-            <div className="relative z-10">
-              <h3 className="text-2xl font-bold mb-4">Safe-Walk Routing</h3>
-              <p className="text-gray-300 mb-6">Navigation that prioritizes well-lit, high-traffic paths for solo travelers.</p>
-              <button onClick={() => setActiveMap('safewalk')} className="btn-primary py-2 px-6 flex items-center gap-2">
-                Start Navigation
-                <ChevronRight size={18} />
-              </button>
-            </div>
-            <div className="absolute top-0 right-0 p-8 opacity-10 group-hover:scale-110 transition-transform">
-              <ShieldCheck size={120} />
-            </div>
-          </div>
+      {/* ── Main Layout ──────────────────────────────────────────────────────── */}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+        <div className="flex flex-col xl:flex-row gap-10">
 
-          <div className="bg-white p-8 rounded-3xl border border-gray-100 shadow-sm relative overflow-hidden group">
-            <div className="relative z-10">
-              <h3 className="text-2xl font-bold text-accent mb-4">Sensory Mapping</h3>
-              <p className="text-muted mb-6">Real-time crowd/noise heatmaps for neurodivergent or elderly travelers.</p>
-              <button onClick={() => setActiveMap('sensory')} className="text-primary font-bold flex items-center gap-2 hover:gap-3 transition-all">
-                View Heatmap
-                <ChevronRight size={18} />
-              </button>
-            </div>
-            <div className="absolute top-0 right-0 p-8 opacity-5 group-hover:scale-110 transition-transform">
-              <Utensils size={120} />
-            </div>
-          </div>
-        </div>
+          {/* ── CENTER: The Form ─────────────────────────────────────────────── */}
+          <div className="flex-1 min-w-0">
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.2 }}
+              className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden"
+            >
+              {/* Form header */}
+              <div className="bg-gradient-to-r from-accent to-accent/90 px-8 py-6">
+                <h2 className="text-white font-bold text-xl font-display">Plan Your Trip</h2>
+                <p className="text-white/50 text-sm mt-1">Fill in the details — we handle the rest.</p>
+              </div>
 
-        {/* Map Modal Overlay */}
-        <AnimatePresence>
-          {activeMap && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6">
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                onClick={() => setActiveMap(null)}
-                className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-              />
-              <motion.div
-                initial={{ opacity: 0, scale: 0.95, y: 20 }}
-                animate={{ opacity: 1, scale: 1, y: 0 }}
-                exit={{ opacity: 0, scale: 0.95, y: 20 }}
-                className="w-full max-w-4xl bg-white rounded-3xl shadow-2xl overflow-hidden relative z-10 h-[80vh] flex flex-col"
-              >
-                {/* Modal Header */}
-                <div className="flex items-center justify-between p-6 border-b border-gray-100">
-                  <div className="flex items-center gap-4">
-                    <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${activeMap === 'safewalk' ? 'bg-primary/10 text-primary' : 'bg-purple-100 text-purple-500'}`}>
-                      {activeMap === 'safewalk' ? <ShieldCheck size={24} /> : <Utensils size={24} />}
-                    </div>
-                    <div>
-                      <h3 className="text-xl font-display font-bold text-accent">
-                        {activeMap === 'safewalk' ? 'Safe-Walk Navigation' : 'Live Sensory Heatmap'}
-                      </h3>
-                      <p className="text-sm text-muted flex items-center gap-2">
-                        <MapPin size={14} /> Local Routing <span className="mx-2">•</span> <WifiOff size={14} /> Available Offline
-                      </p>
-                    </div>
+              <div className="px-8 py-8 space-y-0">
+
+                {/* ── 1. Destination ───────────────────────────────────────── */}
+                <div>
+                  <label className="block text-sm font-bold text-accent mb-2">
+                    Where are you going?
+                  </label>
+
+                  {/* Popular chips */}
+                  <div className="flex flex-wrap gap-2 mb-3">
+                    {POPULAR_DESTINATIONS.map(d => (
+                      <button
+                        key={d.name}
+                        type="button"
+                        onClick={() => selectDestination(d.name)}
+                        className={cn(
+                          "px-3 py-1.5 rounded-full text-xs font-bold border transition-all",
+                          destination === d.name
+                            ? "bg-accent text-white border-accent shadow-sm"
+                            : "bg-white text-muted border-gray-200 hover:border-accent hover:text-accent"
+                        )}
+                      >
+                        {d.emoji} {d.name}
+                      </button>
+                    ))}
                   </div>
-                  <button onClick={() => setActiveMap(null)} className="p-2 text-gray-400 hover:text-accent bg-gray-50 rounded-full">
-                    <X size={20} />
-                  </button>
+
+                  {/* Search input */}
+                  <div ref={searchRef} className="relative">
+                    <div className="relative">
+                      <Search size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-muted" />
+                      <input
+                        type="text"
+                        value={destinationQuery}
+                        onChange={e => {
+                          setDestinationQuery(e.target.value);
+                          setDestination(e.target.value);
+                          setShowDropdown(true);
+                        }}
+                        onFocus={() => setShowDropdown(true)}
+                        placeholder="Search any city or country..."
+                        className={cn(
+                          "w-full pl-11 pr-4 py-3.5 rounded-2xl border text-sm font-medium text-accent placeholder:text-muted/50 outline-none transition-all",
+                          errors.destination
+                            ? "border-red-300 bg-red-50 focus:border-red-400"
+                            : "border-gray-200 bg-gray-50 focus:border-primary focus:bg-white"
+                        )}
+                      />
+                      {destination && (
+                        <button
+                          type="button"
+                          onClick={() => { setDestination(''); setDestinationQuery(''); setSelectedCity(null); }}
+                          className="absolute right-4 top-1/2 -translate-y-1/2 text-muted hover:text-accent"
+                        >
+                          <X size={16} />
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Dropdown */}
+                    <AnimatePresence>
+                      {showDropdown && cityResults.length > 0 && (
+                        <motion.div
+                          initial={{ opacity: 0, y: -8 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, y: -8 }}
+                          className="absolute z-50 top-full mt-2 w-full bg-white rounded-2xl border border-gray-200 shadow-xl overflow-hidden"
+                        >
+                          {cityResults.map(city => (
+                            <button
+                              key={city.id}
+                              type="button"
+                              onClick={() => selectDestination(city.name, city)}
+                              className="w-full flex items-center justify-between px-4 py-3.5 hover:bg-gray-50 transition-colors text-left border-b border-gray-50 last:border-0"
+                            >
+                              <div className="flex items-center gap-3">
+                                <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                                  <MapPin size={14} className="text-primary" />
+                                </div>
+                                <div>
+                                  <p className="font-bold text-accent text-sm">{city.name}</p>
+                                  <p className="text-xs text-muted">{city.country}</p>
+                                </div>
+                              </div>
+                              {city.safety_score > 0 && (
+                                <div className="flex items-center gap-1 text-xs text-green-600 font-bold bg-green-50 px-2 py-1 rounded-lg">
+                                  <Shield size={12} /> {city.safety_score}
+                                </div>
+                              )}
+                            </button>
+                          ))}
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
+                  {errors.destination && (
+                    <p className="text-red-500 text-xs font-medium mt-1.5">{errors.destination}</p>
+                  )}
+
+                  {/* Best months hint */}
+                  {selectedCity?.best_months?.length ? (
+                    <div className="mt-2.5 flex items-center gap-2 flex-wrap">
+                      <span className="text-xs text-muted font-medium">Best time:</span>
+                      {selectedCity.best_months.map(m => (
+                        <span key={m} className="text-xs bg-emerald-50 text-emerald-700 font-bold px-2 py-0.5 rounded-full">
+                          {MONTH_NAMES[m - 1]}
+                        </span>
+                      ))}
+                    </div>
+                  ) : null}
                 </div>
 
-                {/* Map Area */}
-                <div className="flex-1 bg-slate-100 relative overflow-hidden flex items-center justify-center">
-                  {import.meta.env.VITE_MAPBOX_TOKEN ? (
-                    <MapGL
-                      mapboxAccessToken={import.meta.env.VITE_MAPBOX_TOKEN}
-                      initialViewState={{ longitude: 12.4964, latitude: 41.9028, zoom: 14 }}
-                      mapStyle={activeMap === 'safewalk' ? "mapbox://styles/mapbox/navigation-night-v1" : "mapbox://styles/mapbox/dark-v11"}
-                      style={{ width: '100%', height: '100%' }}
-                    />
-                  ) : (
-                    <>
-                      <img
-                        src="https://images.unsplash.com/photo-1524661135-423995f22d0b?auto=format&fit=crop&q=80&w=1200"
-                        alt="Map Engine"
-                        className={`absolute inset-0 w-full h-full object-cover opacity-60 ${activeMap === 'sensory' ? 'hue-rotate-180 contrast-150 saturate-200' : 'grayscale'}`}
-                      />
-                      <div className="relative z-10 bg-white/90 backdrop-blur p-4 rounded-xl shadow-lg border border-white/50 max-w-xs text-center">
-                        <Map size={32} className="mx-auto text-primary mb-2" />
-                        <p className="font-bold text-accent">Mapbox Rendering Engine</p>
-                        <p className="text-xs text-muted">Add VITE_MAPBOX_TOKEN to .env</p>
+                <SectionDivider label="When & How Long" />
+
+                {/* ── 2. Dates & Duration ──────────────────────────────────── */}
+                <div>
+                  <div className="flex flex-col sm:flex-row gap-4 mb-5">
+                    <div className="flex-1">
+                      <label className="block text-xs font-bold text-muted uppercase tracking-wider mb-2">Start Date <span className="font-normal normal-case text-muted/60">(optional)</span></label>
+                      <div className="relative">
+                        <Calendar size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted" />
+                        <input
+                          type="date"
+                          value={startDate}
+                          onChange={e => setStartDate(e.target.value)}
+                          min={new Date().toISOString().split('T')[0]}
+                          className="w-full pl-10 pr-4 py-3 rounded-xl border border-gray-200 bg-gray-50 text-sm font-medium text-accent outline-none focus:border-primary focus:bg-white transition-all"
+                        />
                       </div>
-                    </>
+                    </div>
+
+                    <div className="flex-1">
+                      <label className="block text-xs font-bold text-muted uppercase tracking-wider mb-2">Trip Duration</label>
+                      <div className="flex gap-2 flex-wrap">
+                        {DURATION_PRESETS.map(d => (
+                          <button
+                            key={d}
+                            type="button"
+                            onClick={() => setDays(d)}
+                            className={cn(
+                              "flex-1 min-w-[44px] py-3 rounded-xl text-sm font-bold border transition-all",
+                              days === d
+                                ? "bg-accent text-white border-accent shadow-sm"
+                                : "bg-gray-50 text-muted border-gray-200 hover:border-accent hover:text-accent"
+                            )}
+                          >
+                            {d}d
+                          </button>
+                        ))}
+                        <input
+                          type="number"
+                          value={!DURATION_PRESETS.includes(days) ? days : ''}
+                          onChange={e => {
+                            const v = parseInt(e.target.value);
+                            if (v >= 1 && v <= 30) setDays(v);
+                          }}
+                          placeholder="?"
+                          min={1} max={30}
+                          className="flex-1 min-w-[44px] py-3 rounded-xl text-sm font-bold border border-dashed border-gray-300 bg-gray-50 text-center text-accent outline-none focus:border-primary"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <SectionDivider label="Who's Coming" />
+
+                {/* ── 3. Travelers ─────────────────────────────────────────── */}
+                <div>
+                  <div className="border border-gray-100 rounded-2xl p-4 bg-gray-50/50">
+                    <Counter value={males}   onChange={setMales}   label="Men"   sublabel="Male travelers" min={0} />
+                    <Counter value={females} onChange={setFemales} label="Women" sublabel="Female travelers" min={0} />
+                  </div>
+
+                  {/* Solo female safety notice */}
+                  <AnimatePresence>
+                    {isSoloFemale && (
+                      <motion.div
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{ opacity: 1, height: 'auto' }}
+                        exit={{ opacity: 0, height: 0 }}
+                        className="overflow-hidden"
+                      >
+                        <div className="mt-3 flex items-start gap-3 bg-blue-50 border border-blue-100 rounded-2xl p-4">
+                          <Shield size={18} className="text-blue-500 shrink-0 mt-0.5" />
+                          <div>
+                            <p className="text-sm font-bold text-blue-800">Solo female trip detected</p>
+                            <p className="text-xs text-blue-600 mt-0.5 font-medium">Safety-first routing will be applied. Only well-lit, highly-rated routes selected.</p>
+                          </div>
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+
+                  {errors.travelers && (
+                    <p className="text-red-500 text-xs font-medium mt-1.5">{errors.travelers}</p>
+                  )}
+                </div>
+
+                <SectionDivider label="Budget" />
+
+                {/* ── 4. Budget ────────────────────────────────────────────── */}
+                <div>
+                  <div className="flex items-baseline justify-between mb-4">
+                    <span className="text-sm font-bold text-accent">{budgetLabel}</span>
+                    {budgetPerPersonPerDay > 0 && (
+                      <span className="text-xs text-muted font-medium">≈ ${budgetPerPersonPerDay}/person/day</span>
+                    )}
+                  </div>
+
+                  <input
+                    type="range"
+                    min={200} max={15000} step={100}
+                    value={budget}
+                    onChange={e => setBudget(Number(e.target.value))}
+                    className="w-full h-2 rounded-full accent-primary cursor-pointer mb-5"
+                  />
+
+                  <div className="flex gap-3">
+                    {BUDGET_TIERS.map(t => (
+                      <button
+                        key={t.id}
+                        type="button"
+                        onClick={() => {
+                          setBudgetTier(t.id as 'budget' | 'mid' | 'luxury');
+                          setBudget(t.id === 'budget' ? 600 : t.id === 'luxury' ? 4000 : 1500);
+                        }}
+                        className={cn(
+                          "flex-1 py-3 px-2 rounded-2xl border-2 text-center transition-all",
+                          budgetTier === t.id
+                            ? t.color + ' border-current shadow-sm'
+                            : 'bg-gray-50 border-gray-200 text-muted hover:border-gray-300'
+                        )}
+                      >
+                        <div className="text-lg mb-0.5">{t.icon}</div>
+                        <div className="text-xs font-bold">{t.label}</div>
+                        <div className="text-[10px] font-medium opacity-70">{t.desc}</div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <SectionDivider label="Your Vibe" />
+
+                {/* ── 5. Vibes ─────────────────────────────────────────────── */}
+                <div>
+                  <div className="grid grid-cols-3 sm:grid-cols-4 gap-2.5">
+                    {VIBE_OPTIONS.map(vibe => {
+                      const Icon = vibe.icon;
+                      const active = selectedVibes.includes(vibe.id);
+                      return (
+                        <button
+                          key={vibe.id}
+                          type="button"
+                          onClick={() => toggleVibe(vibe.id)}
+                          className={cn(
+                            "flex flex-col items-center gap-1.5 py-3 px-2 rounded-2xl border-2 transition-all text-center",
+                            active
+                              ? vibe.color + ' border-current shadow-sm scale-[1.02]'
+                              : 'bg-white border-gray-200 text-muted hover:border-gray-300 hover:text-accent'
+                          )}
+                        >
+                          <Icon size={18} className={active ? 'opacity-100' : 'opacity-60'} />
+                          <span className="text-[11px] font-bold leading-tight">{vibe.label}</span>
+                          {active && <CheckCircle2 size={12} className="opacity-70" />}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {selectedVibes.length > 0 && (
+                    <div className="mt-3 flex flex-wrap gap-1.5">
+                      <span className="text-xs text-muted font-medium self-center">Selected:</span>
+                      {selectedVibes.map(id => {
+                        const v = VIBE_OPTIONS.find(x => x.id === id);
+                        return v ? (
+                          <span key={id} className="text-xs bg-accent/10 text-accent font-bold px-2.5 py-1 rounded-full flex items-center gap-1">
+                            {v.label}
+                            <button onClick={() => toggleVibe(id)} className="hover:text-red-500 transition-colors">
+                              <X size={10} />
+                            </button>
+                          </span>
+                        ) : null;
+                      })}
+                    </div>
+                  )}
+                  {errors.vibes && (
+                    <p className="text-red-500 text-xs font-medium mt-1.5">{errors.vibes}</p>
+                  )}
+                </div>
+
+                <SectionDivider label="Travel Pace" />
+
+                {/* ── 6. Pace ──────────────────────────────────────────────── */}
+                <div className="grid grid-cols-3 gap-3">
+                  {PACE_OPTIONS.map(p => (
+                    <button
+                      key={p.id}
+                      type="button"
+                      onClick={() => setPace(p.id as 'relaxed' | 'balanced' | 'packed')}
+                      className={cn(
+                        "py-4 px-3 rounded-2xl border-2 text-center transition-all",
+                        pace === p.id
+                          ? "bg-accent text-white border-accent shadow-md"
+                          : "bg-white border-gray-200 text-accent hover:border-accent/40"
+                      )}
+                    >
+                      <div className="text-2xl mb-2">{p.icon}</div>
+                      <div className={cn("text-sm font-bold", pace === p.id ? 'text-white' : 'text-accent')}>{p.label}</div>
+                      <div className={cn("text-[11px] font-semibold mt-0.5", pace === p.id ? 'text-white/70' : 'text-primary')}>{p.description}</div>
+                      <div className={cn("text-[10px] font-medium mt-1", pace === p.id ? 'text-white/50' : 'text-muted')}>{p.sub}</div>
+                    </button>
+                  ))}
+                </div>
+
+                {/* ── Submit ───────────────────────────────────────────────── */}
+                <div className="pt-8">
+                  <motion.button
+                    type="button"
+                    onClick={handleSubmit}
+                    whileHover={{ scale: 1.01 }}
+                    whileTap={{ scale: 0.98 }}
+                    className="w-full py-5 bg-accent text-white font-bold text-lg rounded-2xl shadow-lg hover:bg-accent/90 transition-all flex items-center justify-center gap-3 group"
+                  >
+                    <Sparkles size={22} className="text-primary" />
+                    Build My Perfect Trip
+                    <ArrowRight size={20} className="group-hover:translate-x-1 transition-transform" />
+                  </motion.button>
+
+                  <p className="text-center text-xs text-muted mt-3 font-medium">
+                    No AI — pure smart algorithm. Results in under 3 seconds.
+                  </p>
+                </div>
+              </div>
+            </motion.div>
+
+            {/* ── Saved Itineraries (auth users) ───────────────────────────── */}
+            {user && (
+              <motion.div
+                initial={{ opacity: 0, y: 16 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.4 }}
+                className="mt-8"
+              >
+                <div className="flex items-center justify-between mb-5">
+                  <h3 className="text-lg font-bold text-accent flex items-center gap-2">
+                    <BookOpen size={20} className="text-primary" />
+                    Your Saved Trips
+                  </h3>
+                  <span className="text-xs text-muted font-medium">{savedTrips.length} trip{savedTrips.length !== 1 ? 's' : ''}</span>
+                </div>
+
+                {loadingSaved ? (
+                  <div className="grid sm:grid-cols-2 gap-4">
+                    {[1, 2].map(i => (
+                      <div key={i} className="h-24 bg-white rounded-2xl border border-gray-100 animate-pulse" />
+                    ))}
+                  </div>
+                ) : savedTrips.length === 0 ? (
+                  <div className="bg-white rounded-2xl border border-dashed border-gray-200 p-8 text-center">
+                    <Plane size={28} className="mx-auto text-muted/30 mb-3" />
+                    <p className="text-muted text-sm font-medium">No saved trips yet.</p>
+                    <p className="text-muted/60 text-xs mt-1">Build your first trip above!</p>
+                  </div>
+                ) : (
+                  <div className="grid sm:grid-cols-2 gap-4">
+                    {savedTrips.map(trip => (
+                      <motion.button
+                        key={trip.id}
+                        whileHover={{ y: -2 }}
+                        onClick={() => navigate(`/itinerary?id=${trip.id}`)}
+                        className="bg-white rounded-2xl border border-gray-100 p-5 text-left hover:border-primary/30 hover:shadow-md transition-all group"
+                      >
+                        <div className="flex items-start justify-between gap-3 mb-3">
+                          <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
+                            <MapPin size={18} className="text-primary" />
+                          </div>
+                          <ChevronRight size={16} className="text-muted group-hover:text-primary transition-colors mt-1" />
+                        </div>
+                        <h4 className="font-bold text-accent text-sm group-hover:text-primary transition-colors leading-snug">{trip.title}</h4>
+                        <p className="text-xs text-muted font-medium mt-1">{trip.destination}</p>
+                        {trip.start_date && (
+                          <div className="flex items-center gap-1.5 mt-2 text-xs text-muted">
+                            <Calendar size={11} />
+                            {new Date(trip.start_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                          </div>
+                        )}
+                      </motion.button>
+                    ))}
+                  </div>
+                )}
+              </motion.div>
+            )}
+          </div>
+
+          {/* ── RIGHT RAIL: Suggested Trip Templates ─────────────────────────── */}
+          <div className="w-full xl:w-[380px] shrink-0 space-y-6">
+
+            {/* Sticky wrapper on desktop */}
+            <div className="xl:sticky xl:top-[100px] space-y-6">
+
+              {/* How it works */}
+              <motion.div
+                initial={{ opacity: 0, x: 16 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: 0.3 }}
+                className="bg-accent rounded-3xl p-6 text-white overflow-hidden relative"
+              >
+                <div className="absolute -top-6 -right-6 w-32 h-32 rounded-full bg-white/5" />
+                <div className="absolute -bottom-8 -left-8 w-24 h-24 rounded-full bg-primary/20" />
+
+                <div className="relative">
+                  <div className="flex items-center gap-2 mb-5">
+                    <Zap size={18} className="text-primary" />
+                    <span className="font-bold text-sm uppercase tracking-wider">How It Works</span>
+                  </div>
+                  <div className="space-y-4">
+                    {[
+                      { n: '01', t: 'You fill the form', d: 'Destination, dates, vibes, budget' },
+                      { n: '02', t: 'Algorithm scores places', d: 'Popularity, safety, value, taste match' },
+                      { n: '03', t: 'Day-by-day plan built', d: 'Optimized slots, no duplicates' },
+                      { n: '04', t: 'Review & customize', d: 'Swap anything, add stops' },
+                    ].map(step => (
+                      <div key={step.n} className="flex items-start gap-3">
+                        <span className="text-primary font-bold text-xs font-mono shrink-0 mt-0.5">{step.n}</span>
+                        <div>
+                          <p className="font-bold text-sm text-white">{step.t}</p>
+                          <p className="text-white/50 text-xs mt-0.5 font-medium">{step.d}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </motion.div>
+
+              {/* Featured Templates */}
+              <motion.div
+                initial={{ opacity: 0, x: 16 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: 0.45 }}
+                className="bg-white rounded-3xl border border-gray-100 overflow-hidden shadow-sm"
+              >
+                <div className="px-6 py-5 border-b border-gray-50 flex items-center justify-between">
+                  <div>
+                    <h3 className="font-bold text-accent flex items-center gap-2">
+                      <Star size={16} className="text-amber-400 fill-amber-400" />
+                      Featured Trips
+                    </h3>
+                    <p className="text-xs text-muted mt-0.5 font-medium">Curated templates — one tap to use</p>
+                  </div>
+                </div>
+
+                <div className="p-4 space-y-3 max-h-[520px] overflow-y-auto no-scrollbar">
+                  {loadingTemplates ? (
+                    Array.from({ length: 4 }).map((_, i) => (
+                      <div key={i} className="h-20 rounded-2xl bg-gray-50 animate-pulse" />
+                    ))
+                  ) : templates.length === 0 ? (
+                    // Fallback static templates when DB is empty
+                    [
+                      { id: 'f1', title: '5 Days in Rome', days: 5, pace: 'balanced', budget_tier: 'mid', tags: ['history', 'food', 'gems'], use_count: 1240, is_featured: true, cities: { name: 'Rome', country: 'Italy' } },
+                      { id: 'f2', title: 'Tokyo in 7 Days', days: 7, pace: 'packed', budget_tier: 'mid', tags: ['food', 'arts', 'nightlife'], use_count: 980, is_featured: true, cities: { name: 'Tokyo', country: 'Japan' } },
+                      { id: 'f3', title: 'Bali Retreat', days: 10, pace: 'relaxed', budget_tier: 'budget', tags: ['beach', 'wellness', 'nature'], use_count: 754, is_featured: true, cities: { name: 'Bali', country: 'Indonesia' } },
+                      { id: 'f4', title: 'Paris Weekend', days: 3, pace: 'balanced', budget_tier: 'luxury', tags: ['arts', 'food', 'history'], use_count: 632, is_featured: true, cities: { name: 'Paris', country: 'France' } },
+                    ].map(t => <TemplateCard key={t.id} template={t} onUse={useTemplate} />)
+                  ) : (
+                    templates.map(t => <TemplateCard key={t.id} template={t} onUse={useTemplate} />)
                   )}
                 </div>
               </motion.div>
+
+              {/* Trust signals */}
+              <motion.div
+                initial={{ opacity: 0, x: 16 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: 0.55 }}
+                className="bg-white rounded-3xl border border-gray-100 p-5 shadow-sm"
+              >
+                <div className="grid grid-cols-3 gap-4 text-center">
+                  {[
+                    { val: '50K+', label: 'Trips built' },
+                    { val: '4.9★', label: 'Avg rating' },
+                    { val: '120+', label: 'Cities' },
+                  ].map(s => (
+                    <div key={s.label}>
+                      <p className="text-xl font-display font-bold text-accent">{s.val}</p>
+                      <p className="text-xs text-muted font-medium mt-0.5">{s.label}</p>
+                    </div>
+                  ))}
+                </div>
+              </motion.div>
+
             </div>
-          )}
-        </AnimatePresence>
+          </div>
+
+        </div>
       </div>
     </div>
+  );
+}
+
+// ─── Template Card ────────────────────────────────────────────────────────────
+
+function TemplateCard({ template: t, onUse }: { template: TripTemplate; onUse: (t: TripTemplate) => void }) {
+  const paceColor = t.pace === 'relaxed' ? 'text-green-600 bg-green-50' : t.pace === 'packed' ? 'text-red-600 bg-red-50' : 'text-blue-600 bg-blue-50';
+  const tierColor = t.budget_tier === 'budget' ? 'text-emerald-700 bg-emerald-50' : t.budget_tier === 'luxury' ? 'text-amber-700 bg-amber-50' : 'text-blue-700 bg-blue-50';
+
+  return (
+    <motion.div
+      whileHover={{ y: -1 }}
+      className="border border-gray-100 rounded-2xl p-4 hover:border-primary/30 hover:shadow-sm transition-all group bg-white"
+    >
+      <div className="flex items-start justify-between gap-3 mb-3">
+        <div className="flex-1 min-w-0">
+          <h4 className="font-bold text-accent text-sm group-hover:text-primary transition-colors truncate">{t.title}</h4>
+          {t.cities && (
+            <p className="text-xs text-muted font-medium mt-0.5 flex items-center gap-1">
+              <MapPin size={10} /> {t.cities.name}, {t.cities.country}
+            </p>
+          )}
+        </div>
+        {t.is_featured && (
+          <Star size={14} className="text-amber-400 fill-amber-400 shrink-0 mt-0.5" />
+        )}
+      </div>
+
+      <div className="flex flex-wrap items-center gap-1.5 mb-3">
+        <span className="text-[10px] font-bold bg-gray-100 text-accent px-2 py-0.5 rounded-full flex items-center gap-1">
+          <Clock size={9} /> {t.days}d
+        </span>
+        <span className={cn("text-[10px] font-bold px-2 py-0.5 rounded-full capitalize", paceColor)}>
+          {t.pace}
+        </span>
+        <span className={cn("text-[10px] font-bold px-2 py-0.5 rounded-full capitalize", tierColor)}>
+          {t.budget_tier}
+        </span>
+        {t.use_count > 0 && (
+          <span className="text-[10px] font-bold text-muted ml-auto flex items-center gap-1">
+            <Heart size={9} className="text-rose-400" /> {t.use_count.toLocaleString()}
+          </span>
+        )}
+      </div>
+
+      {t.tags?.length > 0 && (
+        <div className="flex flex-wrap gap-1 mb-3">
+          {t.tags.slice(0, 3).map(tag => (
+            <span key={tag} className="text-[10px] bg-gray-50 text-muted font-medium px-2 py-0.5 rounded-full capitalize">{tag}</span>
+          ))}
+        </div>
+      )}
+
+      <button
+        type="button"
+        onClick={() => onUse(t)}
+        className="w-full py-2 text-xs font-bold text-primary bg-primary/10 rounded-xl hover:bg-primary/20 transition-colors flex items-center justify-center gap-1.5"
+      >
+        Use This Template <ArrowRight size={12} />
+      </button>
+    </motion.div>
   );
 }
