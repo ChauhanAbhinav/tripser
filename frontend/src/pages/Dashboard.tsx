@@ -456,10 +456,10 @@ export default function Dashboard() {
         </div>
 
         {/* Tab Navigation */}
-        <div className="flex items-center gap-4 sm:gap-6 mb-8 border-b border-gray-200 overflow-x-auto no-scrollbar pb-1">
-          <button onClick={() => handleTabChange('overview')} className={`pb-3 font-bold whitespace-nowrap transition-all border-b-2 ${activeTab === 'overview' ? 'border-primary text-primary' : 'border-transparent text-muted hover:text-accent'}`}>Overview</button>
-          <button onClick={() => handleTabChange('expenses')} className={`pb-3 font-bold whitespace-nowrap transition-all border-b-2 ${activeTab === 'expenses' ? 'border-primary text-primary' : 'border-transparent text-muted hover:text-accent'}`}>Budget & Expenses</button>
-          <button onClick={() => handleTabChange('packing')} className={`pb-3 font-bold whitespace-nowrap transition-all border-b-2 ${activeTab === 'packing' ? 'border-primary text-primary' : 'border-transparent text-muted hover:text-accent'}`}>Packing List</button>
+        <div className="flex bg-white rounded-2xl border border-gray-100 shadow-sm p-1 mb-8 w-fit overflow-x-auto no-scrollbar">
+          <button onClick={() => handleTabChange('overview')} className={`flex items-center gap-2 px-6 py-2.5 rounded-xl text-sm font-bold transition-all ${activeTab === 'overview' ? 'bg-accent text-white shadow' : 'text-muted hover:text-accent'}`}>Overview</button>
+          <button onClick={() => handleTabChange('expenses')} className={`flex items-center gap-2 px-6 py-2.5 rounded-xl text-sm font-bold transition-all ${activeTab === 'expenses' ? 'bg-accent text-white shadow' : 'text-muted hover:text-accent'}`}>Budget & Expenses</button>
+          <button onClick={() => handleTabChange('packing')} className={`flex items-center gap-2 px-6 py-2.5 rounded-xl text-sm font-bold transition-all ${activeTab === 'packing' ? 'bg-accent text-white shadow' : 'text-muted hover:text-accent'}`}>Packing List</button>
         </div>
 
         {activeTab === 'overview' && (
