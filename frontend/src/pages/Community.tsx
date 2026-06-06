@@ -139,7 +139,6 @@ export default function Community() {
   const [storyForm, setStoryForm] = useState({
     gemId: '',
     title: '',
-    excerpt: '',
     body: '',
     mood: 'Memorable',
   });
@@ -445,7 +444,7 @@ export default function Community() {
       user_id: user.id,
       place_id: selectedPlace ? selectedPlace.id : null,
       title,
-      excerpt: storyForm.excerpt.trim() || body.slice(0, 140),
+      excerpt: body.slice(0, 140),
       body,
       mood: storyForm.mood,
       image_url: selectedPlace?.image_url || null,
@@ -458,7 +457,7 @@ export default function Community() {
       return;
     }
 
-    setStoryForm(prev => ({ ...prev, title: '', excerpt: '', body: '', mood: 'Memorable' }));
+    setStoryForm(prev => ({ ...prev, title: '', body: '', mood: 'Memorable' }));
     setIsStoryModalOpen(false);
     loadStories();
     toast('Travel story shared.', 'success');
@@ -864,19 +863,6 @@ export default function Community() {
                     </select>
                   </label>
                 </div>
-
-                <label className="block">
-                  <span className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-muted">
-                    Short preview
-                  </span>
-                  <input
-                    value={storyForm.excerpt}
-                    onChange={event => setStoryForm(prev => ({ ...prev, excerpt: event.target.value }))}
-                    maxLength={160}
-                    className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-3 text-sm text-accent outline-none transition-colors focus:border-primary focus:bg-white"
-                    placeholder="One sentence that captures the moment"
-                  />
-                </label>
 
                 <label className="block">
                   <span className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-muted">

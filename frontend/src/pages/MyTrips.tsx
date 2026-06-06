@@ -22,7 +22,7 @@ import {
   Trash2, X, Clock, CheckCircle2, Plane,
   Search, Filter, Plus, RefreshCw, Hotel,
   Utensils, Activity, Star, ChevronRight,
-  Sparkles, AlertTriangle, Eye, Edit3,
+  Sparkles, AlertTriangle, Eye, Edit3, BriefcaseBusiness,
   Globe, BookOpen, Shield
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
@@ -588,7 +588,7 @@ export default function MyTrips() {
   }
 
   return (
-    <div className="min-h-screen pt-24 pb-16 bg-gray-50">
+    <div className="min-h-screen pt-24 pb-12 bg-gray-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
 
         {/* ── Page header ─────────────────────────────────────────────────── */}
@@ -597,9 +597,8 @@ export default function MyTrips() {
             <motion.h1
               initial={{ opacity: 0, y: -12 }}
               animate={{ opacity: 1, y: 0 }}
-              className="text-3xl sm:text-4xl font-display font-bold text-accent leading-tight"
-            >
-              My Trips
+              className="text-3xl sm:text-4xl font-display font-bold text-accent leading-tight flex items-center gap-3">
+              My Trips <BriefcaseBusiness size={28} className="text-primary shrink-0" /> 
             </motion.h1>
             <motion.p
               initial={{ opacity: 0 }}

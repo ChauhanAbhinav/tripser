@@ -1,6 +1,6 @@
 import { motion } from 'motion/react';
 import { useNavigate } from 'react-router-dom';
-import { Shield, Gem, Map, Users, ChevronRight, Sparkles } from 'lucide-react';
+import { Shield, Gem, Map, Users, ChevronRight, Sparkles, Globe } from 'lucide-react';
 
 const TEAM = [
   { name: 'Aria Chen',    role: 'Founder & CEO',       avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Aria'    },
@@ -13,30 +13,37 @@ export default function About() {
   const navigate = useNavigate();
 
   return (
-    <div className="min-h-screen bg-gray-50 pt-24 pb-16">
+    <div className="min-h-screen bg-gray-50 pt-32 pb-16">
 
-      {/* Hero */}
-      <section className="relative bg-accent text-white py-24 overflow-hidden">
-        <div className="absolute inset-0 opacity-10">
-          <img src="https://images.unsplash.com/photo-1476514525535-07fb3b4ae5f1?w=1200&auto=format" alt="" className="w-full h-full object-cover" />
-        </div>
-        <div className="relative max-w-3xl mx-auto px-4 sm:px-6 text-center">
-          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
-            <span className="inline-flex items-center gap-2 bg-white/10 border border-white/20 text-white/80 text-xs font-bold uppercase tracking-widest px-4 py-2 rounded-full mb-6">
-              <Sparkles size={11} className="text-amber-400" /> Our Story
-            </span>
-            <h1 className="text-4xl sm:text-5xl font-display font-bold mb-6 leading-tight">
-              We built Tripser because travel planning shouldn't take longer than the trip itself.
-            </h1>
-            <p className="text-white/70 text-lg leading-relaxed">
-              Tripser is an Personalised travel planner that puts safety, authenticity, and your budget first — surfacing the hidden gems that guide books miss and routing your days so every hour counts.
-            </p>
-          </motion.div>
-        </div>
-      </section>
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col items-center text-center mb-16">
+        <motion.div
+          initial={{ opacity: 0, scale: 0.5 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="w-20 h-20 bg-primary/10 text-primary rounded-full flex items-center justify-center mx-auto mb-8"
+        >
+          <Globe size={40} />
+        </motion.div>
+        
+        <motion.h1
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="text-4xl sm:text-5xl font-display font-bold text-accent mb-6"
+        >
+          About Tripsy
+        </motion.h1>
+        
+        <motion.p
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.1 }}
+          className="text-muted text-lg font-medium max-w-2xl mx-auto leading-relaxed"
+        >
+          We built Tripser because travel planning shouldn't take longer than the trip itself. A personalized planner that puts safety, authenticity, and your budget first.
+        </motion.p>
+      </div>
 
       {/* Mission */}
-      <section className="max-w-5xl mx-auto px-4 sm:px-6 py-20">
+      <section className="max-w-5xl mx-auto px-4 sm:px-6 pb-20 pt-8">
         <div className="grid md:grid-cols-2 gap-12 items-center">
           <div>
             <span className="text-primary font-bold uppercase tracking-widest text-xs block mb-3">Our Mission</span>

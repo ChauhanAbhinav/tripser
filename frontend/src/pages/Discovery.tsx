@@ -4,7 +4,7 @@ import { motion } from 'motion/react';
 import {
   Search, Filter, MapPin, Shield, Accessibility, Volume2,
   Heart, Sparkles, ChevronRight, Map, LayoutGrid, RefreshCw,
-  Hotel, Utensils, Activity, Gem, TrendingUp, Globe, X
+  Hotel, Utensils, Activity, Gem, TrendingUp, Globe, X, Compass
 } from 'lucide-react';
 import { supabase } from '../lib/supabaseClient';
 import { cn } from '../lib/utils';
@@ -134,7 +134,9 @@ export default function Discovery() {
         {/* Header */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
           <div>
-            <h1 className="text-3xl sm:text-4xl font-display font-bold text-accent">Discovery</h1>
+            <h1 className="text-3xl sm:text-4xl font-display font-bold text-accent flex items-center gap-3">
+              Discovery <Compass size={28} className="text-primary shrink-0" /> 
+            </h1>
             <p className="text-muted mt-1 text-sm">{dest.length} places found{catFilter ? ` · ${CAT_BADGE[catFilter]?.label}s` : ''}</p>
           </div>
 

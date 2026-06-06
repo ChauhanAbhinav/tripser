@@ -85,10 +85,11 @@ const DOC_TYPE_CONFIG: Record<DocType, { label: string; icon: React.ReactNode; c
 
 // ─── Sub-components ─────────────────────────────────────────────────────────────
 
-function PassCard({ pass, onArchive, onDelete }: {
+function PassCard({ pass, onArchive, onDelete, onDownload }: {
   pass: BoardingPass;
   onArchive: (id: string) => void;
   onDelete: (id: string) => void;
+  onDownload: (pass: BoardingPass) => void;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
 
@@ -142,6 +143,12 @@ function PassCard({ pass, onArchive, onDelete }: {
                         <Archive size={14} className="text-muted" /> Archive Pass
                       </button>
                     )}
+                    <button
+                      onClick={() => { onDownload(pass); setMenuOpen(false); }}
+                      className="flex items-center gap-3 w-full px-4 py-3 text-sm text-gray-700 hover:bg-gray-50"
+                    >
+                      <Download size={14} className="text-muted" /> Download PDF
+                    </button>
                     <button
                       onClick={() => { onDelete(pass.id); setMenuOpen(false); }}
                       className="flex items-center gap-3 w-full px-4 py-3 text-sm text-red-500 hover:bg-red-50"
@@ -425,7 +432,7 @@ function AddPassModal({ onClose, onAdd }: { onClose: () => void; onAdd: (p: Boar
 // ─── Add Document Modal ──────────────────────────────────────────────────────
 
 function AddDocModal({ onClose, onAdd }: { onClose: () => void; onAdd: (d: TravelDoc) => void }) {
-  const [form, setForm] = useState({ title: '', description: '', type: 'passport' as DocType, expiry: '', status: 'Active' });
+  const [form, setForm] = useState({ title: '', type: 'passport' as DocType, status: 'Active' });
   const fileRef = useRef<HTMLInputElement>(null);
   const [filePreview, setFilePreview] = useState<{ url: string; type: 'image' | 'pdf' } | null>(null);
 
@@ -441,6 +448,7 @@ function AddDocModal({ onClose, onAdd }: { onClose: () => void; onAdd: (d: Trave
     onAdd({
       id: crypto.randomUUID(),
       ...form,
+      description: '',
       file_url: filePreview?.url,
       file_type: filePreview?.type,
     });
@@ -492,17 +500,6 @@ function AddDocModal({ onClose, onAdd }: { onClose: () => void; onAdd: (d: Trave
             <label className="text-xs font-bold text-muted uppercase tracking-wider">Title</label>
             <input value={form.title} onChange={e => setForm(v => ({ ...v, title: e.target.value }))}
               placeholder="e.g. US Passport"
-              className="mt-1 w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:border-primary" />
-          </div>
-          <div>
-            <label className="text-xs font-bold text-muted uppercase tracking-wider">Details</label>
-            <input value={form.description} onChange={e => setForm(v => ({ ...v, description: e.target.value }))}
-              placeholder="e.g. Expires Oct 2030 · Passport #P123456"
-              className="mt-1 w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:border-primary" />
-          </div>
-          <div>
-            <label className="text-xs font-bold text-muted uppercase tracking-wider">Expiry Date</label>
-            <input type="date" value={form.expiry} onChange={e => setForm(v => ({ ...v, expiry: e.target.value }))}
               className="mt-1 w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:border-primary" />
           </div>
 
@@ -557,6 +554,16 @@ export default function Wallet() {
   const handleDeletePass = (id: string) => setPasses(ps => ps.filter(p => p.id !== id));
   const handleDeleteDoc = (id: string) => setDocs(ds => ds.filter(d => d.id !== id));
 
+  const handleDownloadPass = (pass: BoardingPass) => {
+    // In production: generate PDF via jsPDF or call edge function
+    const content = `TRIPSER BOARDING PASS\n\nFlight: ${pass.flight}\nFrom: ${pass.from_city} (${pass.from_code})\nTo: ${pass.to_city} (${pass.to_code})\nDate: ${pass.date || 'N/A'}\nGate: ${pass.gate}\nSeat: ${pass.seat}\nClass: ${pass.class}`;
+    const blob = new Blob([content], { type: 'text/plain' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `BoardingPass_${pass.flight.replace(/\s+/g, '_')}.pdf.txt`;
+    link.click();
+  };
+
   const handleDownload = (doc: TravelDoc) => {
     // In production: generate PDF via jsPDF or call edge function
     const link = document.createElement('a');
@@ -574,7 +581,7 @@ export default function Wallet() {
   };
 
   return (
-    <div className="min-h-screen pt-24 pb-16 bg-gray-50">
+    <div className="min-h-screen pt-24 pb-12 bg-gray-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
 
         {/* Header */}
@@ -582,7 +589,7 @@ export default function Wallet() {
           <div>
             <h1 className="text-3xl sm:text-4xl font-display font-bold text-accent flex items-center gap-3">
               Travel Wallet
-              <ShieldCheck size={28} className="text-green-500" />
+              <ShieldCheck size={28} className="text-green-500 shrink-0" />
             </h1>
             <p className="text-muted mt-1.5 text-sm">Boarding passes &amp; identity documents, all in one place.</p>
           </div>
@@ -648,7 +655,7 @@ export default function Wallet() {
                 <div className="space-y-5">
                   <AnimatePresence>
                     {activePasses.map(p => (
-                      <PassCard key={p.id} pass={p} onArchive={handleArchive} onDelete={handleDeletePass} />
+                      <PassCard key={p.id} pass={p} onArchive={handleArchive} onDelete={handleDeletePass} onDownload={handleDownloadPass} />
                     ))}
                   </AnimatePresence>
                 </div>
@@ -674,7 +681,7 @@ export default function Wallet() {
                         className="space-y-5 overflow-hidden"
                       >
                         {archivedPasses.map(p => (
-                          <PassCard key={p.id} pass={p} onArchive={handleArchive} onDelete={handleDeletePass} />
+                          <PassCard key={p.id} pass={p} onArchive={handleArchive} onDelete={handleDeletePass} onDownload={handleDownloadPass} />
                         ))}
                       </motion.div>
                     )}

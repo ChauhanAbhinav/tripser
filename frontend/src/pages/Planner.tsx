@@ -15,7 +15,7 @@ import {
   ChevronRight, Star, Sparkles, Shield, Globe, ArrowRight,
   Mountain, Utensils, Palette, Waves, ShoppingBag, Leaf,
   Music, Eye, Smile, Compass, Plus, Minus, X, CheckCircle2,
-  Hotel, Plane, BookOpen, TrendingUp, Heart
+  Hotel, Plane, BookOpen, TrendingUp, Heart, Route, Landmark, Building2, Palmtree, Coffee, Scale, Gem
 } from 'lucide-react';
 import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../hooks/userAuth';
@@ -28,6 +28,7 @@ interface City {
 interface TripTemplate {
   id: string; title: string; days: number; pace: string; budget_tier: string;
   tags: string[]; use_count: number; is_featured: boolean; cities?: { name: string; country: string };
+  image_url?: string;
 }
 interface SavedItinerary {
   id: string; title: string; destination: string;
@@ -35,12 +36,12 @@ interface SavedItinerary {
 }
 
 const POPULAR_DESTINATIONS = [
-  { name: 'Rome', country: 'Italy', emoji: '🏛' },
-  { name: 'Tokyo', country: 'Japan', emoji: '⛩' },
-  { name: 'Bali', country: 'Indonesia', emoji: '🌴' },
-  { name: 'Paris', country: 'France', emoji: '🗼' },
-  { name: 'New York', country: 'USA', emoji: '🗽' },
-  { name: 'Barcelona', country: 'Spain', emoji: '🎨' },
+  { name: 'Rome', country: 'Italy', icon: Landmark },
+  { name: 'Tokyo', country: 'Japan', icon: Building2 },
+  { name: 'Bali', country: 'Indonesia', icon: Palmtree },
+  { name: 'Paris', country: 'France', icon: MapPin },
+  { name: 'New York', country: 'USA', icon: Building2 },
+  { name: 'Barcelona', country: 'Spain', icon: Palette },
 ];
 
 const VIBE_OPTIONS = [
@@ -59,15 +60,15 @@ const VIBE_OPTIONS = [
 ];
 
 const PACE_OPTIONS = [
-  { id: 'relaxed',  label: 'Relaxed',  icon: '😌', description: '2–3 stops/day', sub: 'Slow travel, lots of rest' },
-  { id: 'balanced', label: 'Balanced', icon: '⚖️', description: '4–5 stops/day', sub: 'Mix of activity & rest' },
-  { id: 'packed',   label: 'Packed',   icon: '⚡', description: '6+ stops/day',  sub: 'Maximum sights & experiences' },
+  { id: 'relaxed',  label: 'Relaxed',  icon: Coffee, description: '2–3 stops/day', sub: 'Slow travel, lots of rest' },
+  { id: 'balanced', label: 'Balanced', icon: Scale, description: '4–5 stops/day', sub: 'Mix of activity & rest' },
+  { id: 'packed',   label: 'Packed',   icon: Zap, description: '6+ stops/day',  sub: 'Maximum sights & experiences' },
 ];
 
 const BUDGET_TIERS = [
-  { id: 'budget',  label: 'Budget',  icon: '💰', desc: '< $80/day',   color: 'border-emerald-200 bg-emerald-50 text-emerald-800' },
-  { id: 'mid',     label: 'Mid',     icon: '🎯', desc: '$80–200/day', color: 'border-blue-200 bg-blue-50 text-blue-800' },
-  { id: 'luxury',  label: 'Luxury',  icon: '💎', desc: '$200+/day',   color: 'border-amber-200 bg-amber-50 text-amber-800' },
+  { id: 'budget',  label: 'Budget',  icon: Wallet, desc: '< $80/day',   color: 'border-emerald-200 bg-emerald-50 text-emerald-800' },
+  { id: 'mid',     label: 'Mid',     icon: Landmark, desc: '$80–200/day', color: 'border-blue-200 bg-blue-50 text-blue-800' },
+  { id: 'luxury',  label: 'Luxury',  icon: Gem, desc: '$200+/day',   color: 'border-amber-200 bg-amber-50 text-amber-800' },
 ];
 
 const DURATION_PRESETS = [3, 5, 7, 10, 14];
@@ -272,13 +273,16 @@ export default function Planner() {
                 <div>
                   <label className="block text-xs font-bold text-muted uppercase tracking-widest mb-3">Where are you going?</label>
                   <div className="flex flex-wrap gap-2 mb-3">
-                    {POPULAR_DESTINATIONS.map(d => (
-                      <button key={d.name} type="button" onClick={() => selectDestination(d.name)}
-                        className={cn("px-3 py-1.5 rounded-full text-xs font-bold border transition-all",
-                          destination === d.name ? "bg-accent text-white border-accent shadow-sm" : "bg-white text-muted border-gray-200 hover:border-accent hover:text-accent")}>
-                        {d.emoji} {d.name}
-                      </button>
-                    ))}
+                    {POPULAR_DESTINATIONS.map(d => {
+                      const Icon = d.icon;
+                      return (
+                        <button key={d.name} type="button" onClick={() => selectDestination(d.name)}
+                          className={cn("px-3 py-1.5 rounded-full text-xs font-bold border transition-all flex items-center gap-1.5",
+                            destination === d.name ? "bg-accent text-white border-accent shadow-sm" : "bg-white text-muted border-gray-200 hover:border-accent hover:text-accent")}>
+                          <Icon size={12} /> {d.name}
+                        </button>
+                      );
+                    })}
                   </div>
                   <div ref={searchRef} className="relative">
                     <div className="relative">
@@ -394,15 +398,18 @@ export default function Planner() {
                   </div>
                   <input type="range" min={200} max={15000} step={100} value={budget} onChange={e => setBudget(Number(e.target.value))} className="w-full h-2 rounded-full accent-primary cursor-pointer mb-4" />
                   <div className="flex gap-3">
-                    {BUDGET_TIERS.map(t => (
-                      <button key={t.id} type="button" onClick={() => { setBudgetTier(t.id as any); setBudget(t.id === 'budget' ? 600 : t.id === 'luxury' ? 4000 : 1500); }}
-                        className={cn("flex-1 py-3 px-2 rounded-2xl border-2 text-center transition-all",
-                          budgetTier === t.id ? t.color + ' border-current shadow-sm' : 'bg-gray-50 border-gray-200 text-muted hover:border-gray-300')}>
-                        <div className="text-lg mb-0.5">{t.icon}</div>
-                        <div className="text-xs font-bold">{t.label}</div>
-                        <div className="text-[10px] font-medium opacity-70">{t.desc}</div>
-                      </button>
-                    ))}
+                    {BUDGET_TIERS.map(t => {
+                      const Icon = t.icon;
+                      return (
+                        <button key={t.id} type="button" onClick={() => { setBudgetTier(t.id as any); setBudget(t.id === 'budget' ? 600 : t.id === 'luxury' ? 4000 : 1500); }}
+                          className={cn("flex-1 py-3 px-2 rounded-2xl border-2 text-center transition-all",
+                            budgetTier === t.id ? t.color + ' border-current shadow-sm' : 'bg-gray-50 border-gray-200 text-muted hover:border-gray-300')}>
+                          <div className="flex justify-center mb-1.5"><Icon size={20} className="opacity-80" /></div>
+                          <div className="text-xs font-bold">{t.label}</div>
+                          <div className="text-[10px] font-medium opacity-70">{t.desc}</div>
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
 
@@ -446,16 +453,19 @@ export default function Planner() {
 
                 {/* 6. Pace */}
                 <div className="grid grid-cols-3 gap-3 mb-2">
-                  {PACE_OPTIONS.map(p => (
-                    <button key={p.id} type="button" onClick={() => setPace(p.id as any)}
-                      className={cn("py-4 px-3 rounded-2xl border-2 text-center transition-all",
-                        pace === p.id ? "bg-accent text-white border-accent shadow-md" : "bg-white border-gray-200 text-accent hover:border-accent/40")}>
-                      <div className="text-2xl mb-2">{p.icon}</div>
-                      <div className={cn("text-sm font-bold", pace === p.id ? 'text-white' : 'text-accent')}>{p.label}</div>
-                      <div className={cn("text-[11px] font-semibold mt-0.5", pace === p.id ? 'text-white/70' : 'text-primary')}>{p.description}</div>
-                      <div className={cn("text-[10px] font-medium mt-1", pace === p.id ? 'text-white/50' : 'text-muted')}>{p.sub}</div>
-                    </button>
-                  ))}
+                  {PACE_OPTIONS.map(p => {
+                    const Icon = p.icon;
+                    return (
+                      <button key={p.id} type="button" onClick={() => setPace(p.id as any)}
+                        className={cn("py-4 px-3 rounded-2xl border-2 text-center transition-all",
+                          pace === p.id ? "bg-accent text-white border-accent shadow-md" : "bg-white border-gray-200 text-accent hover:border-accent/40")}>
+                        <div className="flex justify-center mb-2"><Icon size={24} className={pace === p.id ? 'text-white' : 'text-primary'} /></div>
+                        <div className={cn("text-sm font-bold", pace === p.id ? 'text-white' : 'text-accent')}>{p.label}</div>
+                        <div className={cn("text-[11px] font-semibold mt-0.5", pace === p.id ? 'text-white/70' : 'text-primary')}>{p.description}</div>
+                        <div className={cn("text-[10px] font-medium mt-1", pace === p.id ? 'text-white/50' : 'text-muted')}>{p.sub}</div>
+                      </button>
+                    );
+                  })}
                 </div>
 
                 {/* Submit — consistent with other CTAs */}
@@ -563,13 +573,13 @@ export default function Planner() {
                 </div>
                 <div className="p-4 space-y-3 max-h-[480px] overflow-y-auto no-scrollbar">
                   {loadingTemplates ? (
-                    Array.from({ length: 4 }).map((_, i) => <div key={i} className="h-20 rounded-2xl bg-gray-50 animate-pulse" />)
+                    Array.from({ length: 3 }).map((_, i) => <div key={i} className="h-48 rounded-2xl bg-gray-50 border border-gray-100 animate-pulse" />)
                   ) : templates.length === 0 ? (
                     [
-                      { id: 'f1', title: '5 Days in Rome', days: 5, pace: 'balanced', budget_tier: 'mid', tags: ['history', 'food', 'gems'], use_count: 1240, is_featured: true, cities: { name: 'Rome', country: 'Italy' } },
-                      { id: 'f2', title: 'Tokyo in 7 Days', days: 7, pace: 'packed', budget_tier: 'mid', tags: ['food', 'arts', 'nightlife'], use_count: 980, is_featured: true, cities: { name: 'Tokyo', country: 'Japan' } },
-                      { id: 'f3', title: 'Bali Retreat', days: 10, pace: 'relaxed', budget_tier: 'budget', tags: ['beach', 'wellness', 'nature'], use_count: 754, is_featured: true, cities: { name: 'Bali', country: 'Indonesia' } },
-                      { id: 'f4', title: 'Paris Weekend', days: 3, pace: 'balanced', budget_tier: 'luxury', tags: ['arts', 'food', 'history'], use_count: 632, is_featured: true, cities: { name: 'Paris', country: 'France' } },
+                      { id: 'f1', title: '5 Days in Rome', days: 5, pace: 'balanced', budget_tier: 'mid', tags: ['history', 'food', 'gems'], use_count: 1240, is_featured: true, cities: { name: 'Rome', country: 'Italy' }, image_url: 'https://images.unsplash.com/photo-1552832230-c0197dd311b5?w=800&auto=format' },
+                      { id: 'f2', title: 'Tokyo in 7 Days', days: 7, pace: 'packed', budget_tier: 'mid', tags: ['food', 'arts', 'nightlife'], use_count: 980, is_featured: true, cities: { name: 'Tokyo', country: 'Japan' }, image_url: 'https://images.unsplash.com/photo-1540959733332-eab4deabeeaf?w=800&auto=format' },
+                      { id: 'f3', title: 'Bali Retreat', days: 10, pace: 'relaxed', budget_tier: 'budget', tags: ['beach', 'wellness', 'nature'], use_count: 754, is_featured: true, cities: { name: 'Bali', country: 'Indonesia' }, image_url: 'https://images.unsplash.com/photo-1537996194471-e657df975ab4?w=800&auto=format' },
+                      { id: 'f4', title: 'Paris Weekend', days: 3, pace: 'balanced', budget_tier: 'luxury', tags: ['arts', 'food', 'history'], use_count: 632, is_featured: true, cities: { name: 'Paris', country: 'France' }, image_url: 'https://images.unsplash.com/photo-1499856871958-5b9627545d1a?w=800&auto=format' },
                     ].map(t => <TemplateCard key={t.id} template={t} onUse={useTemplate} />)
                   ) : (
                     templates.map(t => <TemplateCard key={t.id} template={t} onUse={useTemplate} />)
@@ -601,24 +611,39 @@ export default function Planner() {
 function TemplateCard({ template: t, onUse }: { template: TripTemplate; onUse: (t: TripTemplate) => void }) {
   const paceColor = t.pace === 'relaxed' ? 'text-green-600 bg-green-50' : t.pace === 'packed' ? 'text-red-600 bg-red-50' : 'text-blue-600 bg-blue-50';
   const tierColor = t.budget_tier === 'budget' ? 'text-emerald-700 bg-emerald-50' : t.budget_tier === 'luxury' ? 'text-amber-700 bg-amber-50' : 'text-blue-700 bg-blue-50';
+
+  const getFallbackImage = (name: string) => {
+    const map: Record<string, string> = {
+      'Rome': 'https://images.unsplash.com/photo-1552832230-c0197dd311b5?w=600&auto=format',
+      'Tokyo': 'https://images.unsplash.com/photo-1540959733332-eab4deabeeaf?w=600&auto=format',
+      'Bali': 'https://images.unsplash.com/photo-1537996194471-e657df975ab4?w=600&auto=format',
+      'Paris': 'https://images.unsplash.com/photo-1499856871958-5b9627545d1a?w=600&auto=format'
+    };
+    return map[name] || 'https://images.unsplash.com/photo-1476514525535-07fb3b4ae5f1?w=600&auto=format';
+  };
+
+  const imageUrl = t.image_url || (t.cities ? getFallbackImage(t.cities.name) : getFallbackImage('Default'));
+
   return (
-    <motion.div whileHover={{ y: -1 }} className="border border-gray-100 rounded-2xl p-4 hover:border-primary/30 hover:shadow-sm transition-all group bg-gray-50/50">
-      <div className="flex items-start justify-between gap-3 mb-2">
-        <div className="flex-1 min-w-0">
-          <h4 className="font-bold text-accent text-sm group-hover:text-primary transition-colors truncate">{t.title}</h4>
-          {t.cities && <p className="text-xs text-muted font-medium mt-0.5 flex items-center gap-1"><MapPin size={9} /> {t.cities.name}, {t.cities.country}</p>}
+    <motion.div whileHover={{ y: -2 }} className="border border-gray-100 rounded-2xl bg-white hover:border-primary/30 hover:shadow-md transition-all group overflow-hidden flex flex-col">
+      <div className="h-28 relative overflow-hidden bg-gray-100 shrink-0">
+        <img src={imageUrl} alt={t.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
+        {t.is_featured && <Star size={14} className="absolute top-2 right-2 text-amber-400 fill-amber-400" />}
+        <h4 className="absolute bottom-2 left-3 right-3 font-bold text-white text-sm leading-snug truncate drop-shadow-sm">{t.title}</h4>
+      </div>
+      <div className="p-3 flex-1 flex flex-col">
+        {t.cities && <p className="text-[11px] text-muted font-medium mb-2 flex items-center gap-1"><MapPin size={10} className="text-primary"/> {t.cities.name}, {t.cities.country}</p>}
+        <div className="flex flex-wrap items-center gap-1.5 mb-3">
+          <span className="text-[10px] font-bold bg-gray-100 text-accent px-1.5 py-0.5 rounded-md flex items-center gap-1"><Clock size={9} /> {t.days}d</span>
+          <span className={cn("text-[10px] font-bold px-1.5 py-0.5 rounded-md capitalize", paceColor)}>{t.pace}</span>
+          <span className={cn("text-[10px] font-bold px-1.5 py-0.5 rounded-md capitalize", tierColor)}>{t.budget_tier}</span>
+          {t.use_count > 0 && <span className="text-[10px] font-bold text-muted ml-auto flex items-center gap-1"><Heart size={9} className="text-rose-400" /> {t.use_count.toLocaleString()}</span>}
         </div>
-        {t.is_featured && <Star size={13} className="text-amber-400 fill-amber-400 shrink-0 mt-0.5" />}
+        <button type="button" onClick={() => onUse(t)} className="mt-auto w-full py-2 text-xs font-bold text-primary bg-primary/5 rounded-xl hover:bg-primary/10 transition-colors flex items-center justify-center gap-1.5 border border-primary/10">
+          Use Template <ArrowRight size={11} />
+        </button>
       </div>
-      <div className="flex flex-wrap items-center gap-1.5 mb-3">
-        <span className="text-[10px] font-bold bg-gray-100 text-accent px-2 py-0.5 rounded-full flex items-center gap-1"><Clock size={9} /> {t.days}d</span>
-        <span className={cn("text-[10px] font-bold px-2 py-0.5 rounded-full capitalize", paceColor)}>{t.pace}</span>
-        <span className={cn("text-[10px] font-bold px-2 py-0.5 rounded-full capitalize", tierColor)}>{t.budget_tier}</span>
-        {t.use_count > 0 && <span className="text-[10px] font-bold text-muted ml-auto flex items-center gap-1"><Heart size={9} className="text-rose-400" /> {t.use_count.toLocaleString()}</span>}
-      </div>
-      <button type="button" onClick={() => onUse(t)} className="w-full py-2 text-xs font-bold text-primary bg-primary/10 rounded-xl hover:bg-primary/20 transition-colors flex items-center justify-center gap-1.5">
-        Use Template <ArrowRight size={11} />
-      </button>
     </motion.div>
   );
 }
