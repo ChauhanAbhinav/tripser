@@ -105,7 +105,7 @@ export default function TravelStoryDetails() {
         />
         <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/35 to-black/35" />
 
-        <div className="relative mx-auto flex min-h-[560px] max-w-5xl flex-col justify-end px-4 pb-10 sm:px-6 lg:px-8">
+      <div className="relative mx-auto flex min-h-[560px] max-w-7xl flex-col justify-end px-4 pb-10 sm:px-6 lg:px-8">
           <button
             onClick={() => navigate('/community')}
             className="mb-auto mt-4 inline-flex w-fit items-center gap-2 rounded-full bg-white/15 px-4 py-2 text-sm font-bold backdrop-blur transition-colors hover:bg-white/25"
@@ -134,7 +134,7 @@ export default function TravelStoryDetails() {
         </div>
       </section>
 
-      <main className="mx-auto max-w-5xl px-4 py-8 sm:px-6 lg:px-8">
+    <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
         <div className="grid gap-6 lg:grid-cols-[0.7fr_1.3fr]">
           <aside className="space-y-6">
             <section className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">

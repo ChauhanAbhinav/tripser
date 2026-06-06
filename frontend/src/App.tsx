@@ -3,7 +3,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Link, useLocation } from 'react-router-dom';
+import { useEffect } from 'react';
 import Navbar from './components/Navbar';
 import Home from './pages/Home';
 import Discovery from './pages/Discovery';
@@ -14,17 +15,29 @@ import Itinerary from './pages/Itinerary';
 import Wallet from './pages/Wallet';
 import Dashboard from './pages/Dashboard';
 import SOSButton from './components/SOSButton';
+import About from './pages/About';
 import Community from './pages/Community';
 import AuthCallback from './pages/AuthCallback';
 import ProtectedRoute from './components/ProtectedRoute';
 import { ToastProvider } from './components/Toast';
 import CompleteProfileModal from './components/CompleteProfileModal';
 import MyTrips from './pages/MyTrips';
+import FAQ from './pages/FAQ';
+import MobileApp from './pages/MobileApp';
+
+function ScrollToTop() {
+  const { pathname } = useLocation();
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [pathname]);
+  return null;
+}
 
 export default function App() {
   return (
     <ToastProvider>
       <Router>
+        <ScrollToTop />
         <div className="min-h-screen bg-background selection:bg-primary/30">
           <Navbar />
           <main>
@@ -54,6 +67,9 @@ export default function App() {
               />
               <Route path="/community" element={<Community />} />
               <Route path="/auth/callback" element={<AuthCallback />} />
+              <Route path="/about" element={<About />} />
+              <Route path="/faq" element={<FAQ />} />
+              <Route path="/mobile" element={<MobileApp />} />
             </Routes>
           </main>
 
@@ -78,29 +94,28 @@ export default function App() {
                 </div>
 
                 <div>
-                  <h4 className="font-bold text-accent mb-6">Company</h4>
+                  <h4 className="font-bold text-accent mb-6">Tripsy</h4>
                   <ul className="space-y-4 text-muted text-sm">
-                    <li><a href="#" className="hover:text-primary">About</a></li>
-                    <li><a href="#" className="hover:text-primary">Careers</a></li>
-                    <li><a href="#" className="hover:text-primary">Mobile</a></li>
+                    <li><Link to="/about" className="hover:text-primary transition-colors">About</Link></li>
+                    <li><Link to="/mobile" className="hover:text-primary transition-colors">Mobile App</Link></li>
+                    <li><Link to="/faq" className="hover:text-primary transition-colors">Help & FAQ</Link></li>
                   </ul>
                 </div>
 
                 <div>
-                  <h4 className="font-bold text-accent mb-6">Contact</h4>
+                  <h4 className="font-bold text-accent mb-6">Tools</h4>
                   <ul className="space-y-4 text-muted text-sm">
-                    <li><a href="#" className="hover:text-primary">Help/FAQ</a></li>
-                    <li><a href="#" className="hover:text-primary">Press</a></li>
-                    <li><a href="#" className="hover:text-primary">Affiliates</a></li>
+                    <li><Link to="/planner" className="hover:text-primary transition-colors">Trip Planner</Link></li>
+                    <li><Link to="/dashboard?tab=expenses" className="hover:text-primary transition-colors">Budget Calculator</Link></li>
+                    <li><Link to="/dashboard?tab=packing" className="hover:text-primary transition-colors">Packing List</Link></li>
                   </ul>
                 </div>
 
                 <div>
                   <h4 className="font-bold text-accent mb-6">More</h4>
                   <ul className="space-y-4 text-muted text-sm">
-                    <li><a href="#" className="hover:text-primary">Airlinefees</a></li>
-                    <li><a href="#" className="hover:text-primary">Airline</a></li>
-                    <li><a href="#" className="hover:text-primary">Low fare tips</a></li>
+                    <li><Link to="/my-trips" className="hover:text-primary transition-colors">My Trips</Link></li>
+                    <li><Link to="/wallet" className="hover:text-primary transition-colors">Travel Wallet</Link></li>
                   </ul>
                 </div>
               </div>

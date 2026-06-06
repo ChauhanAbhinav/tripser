@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { MapPin, Globe, Leaf, Users, ChevronRight, Loader2, CheckSquare, Square, WalletCards, Receipt, X, Plus, Archive, RefreshCw, AlertCircle, ChevronDown, Compass, BookOpen, HeartHandshake, Sparkles, Map as MapIcon, TrendingUp, Hotel, Utensils, Bus, Ticket, ShoppingBag, Pill, Package, Plane } from 'lucide-react';
 import { api } from '../services/api';
@@ -66,7 +66,8 @@ const CircularProgress = ({ value, color, icon: Icon, label }: { value: number, 
 export default function Dashboard() {
   const [profile, setProfile] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'overview' | 'expenses' | 'packing'>('overview');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [activeTab, setActiveTab] = useState<'overview' | 'expenses' | 'packing'>((searchParams.get('tab') as any) || 'overview');
   const { toast } = useToast();
   const navigate = useNavigate();
 
@@ -93,6 +94,18 @@ export default function Dashboard() {
   const [aiProfile, setAiProfile] = useState<any>(null);
   const [isAiLoading, setIsAiLoading] = useState(false);
   const [upcomingTrip, setUpcomingTrip] = useState<any>(null);
+
+  useEffect(() => {
+    const tab = searchParams.get('tab');
+    if (tab === 'overview' || tab === 'expenses' || tab === 'packing') {
+      setActiveTab(tab);
+    }
+  }, [searchParams]);
+
+  const handleTabChange = (tab: 'overview' | 'expenses' | 'packing') => {
+    setActiveTab(tab);
+    setSearchParams({ tab });
+  };
 
   useEffect(() => {
     async function loadData() {
@@ -444,9 +457,9 @@ export default function Dashboard() {
 
         {/* Tab Navigation */}
         <div className="flex items-center gap-4 sm:gap-6 mb-8 border-b border-gray-200 overflow-x-auto no-scrollbar pb-1">
-          <button onClick={() => setActiveTab('overview')} className={`pb-3 font-bold whitespace-nowrap transition-all border-b-2 ${activeTab === 'overview' ? 'border-primary text-primary' : 'border-transparent text-muted hover:text-accent'}`}>Overview</button>
-          <button onClick={() => setActiveTab('expenses')} className={`pb-3 font-bold whitespace-nowrap transition-all border-b-2 ${activeTab === 'expenses' ? 'border-primary text-primary' : 'border-transparent text-muted hover:text-accent'}`}>Budget & Expenses</button>
-          <button onClick={() => setActiveTab('packing')} className={`pb-3 font-bold whitespace-nowrap transition-all border-b-2 ${activeTab === 'packing' ? 'border-primary text-primary' : 'border-transparent text-muted hover:text-accent'}`}>Packing List</button>
+          <button onClick={() => handleTabChange('overview')} className={`pb-3 font-bold whitespace-nowrap transition-all border-b-2 ${activeTab === 'overview' ? 'border-primary text-primary' : 'border-transparent text-muted hover:text-accent'}`}>Overview</button>
+          <button onClick={() => handleTabChange('expenses')} className={`pb-3 font-bold whitespace-nowrap transition-all border-b-2 ${activeTab === 'expenses' ? 'border-primary text-primary' : 'border-transparent text-muted hover:text-accent'}`}>Budget & Expenses</button>
+          <button onClick={() => handleTabChange('packing')} className={`pb-3 font-bold whitespace-nowrap transition-all border-b-2 ${activeTab === 'packing' ? 'border-primary text-primary' : 'border-transparent text-muted hover:text-accent'}`}>Packing List</button>
         </div>
 
         {activeTab === 'overview' && (
